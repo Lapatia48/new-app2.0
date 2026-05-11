@@ -7,7 +7,7 @@ import {
   listProductIds,
   updateProduct
 } from '@/services/entities/productsService'
-import { listStockAvailableIds, setQuantityForProduct } from '@/services/entities/stockAvailablesService'
+import { listStockAvailableIds, setQuantityForProduct, setQuantityForProductAttribute } from '@/services/entities/stockAvailablesService'
 import { uploadProductImage } from '@/services/entities/imagesService'
 import { createCustomer, findCustomerIdByEmail } from '@/services/entities/customersService'
 import { createAddress } from '@/services/entities/addressesService'
@@ -15,6 +15,9 @@ import { createCart } from '@/services/entities/cartsService'
 import { createOrder } from '@/services/entities/ordersService'
 import { createOrderDetail } from '@/services/entities/orderDetailsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
+import { createProductOption, findProductOptionIdByName } from '@/services/entities/productOptionsService'
+import { createProductOptionValue, findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
+import { createCombinationForProduct, findCombinationByProductAndValueId } from '@/services/entities/combinationsService'
 import { getXml } from '@/services/http/prestashopClient'
 import { slugify, toFloat, toInt } from '@/services/utils/stringUtils'
 import { getText, parseXml } from '@/services/xml/xmlUtils'
@@ -55,7 +58,7 @@ async function importProducts(rows) {
 
     const categoryName = row.categorie?.trim()
     const categoryId = await ensureCategoryId(categoryName)
-    const availableDate = toIsoDate(row.date_produit)
+    const availableDate = toIsoDate(row.date_availability_produit || row.date_produit)
 
     const input = {
       name,
@@ -77,6 +80,7 @@ async function importProducts(rows) {
       success += 1
     } catch (error) {
       console.log(`Row ${index + 1}: ${error.message}`)
+      console.log(error)
     }
   }
 
@@ -90,30 +94,83 @@ async function importProducts(rows) {
 
 async function importStocks(rows) {
   let success = 0
-  const byReference = new Map()
+  const baseStockTotals = new Map()
+  const hasCombination = new Set()
+  const optionCache = new Map()
+  const valueCache = new Map()
+  const combinationCache = new Map()
+  const productCache = new Map()
 
-  rows.forEach((row) => {
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
     const reference = row.reference?.trim()
     if (!reference) {
-      return
+      continue
     }
-    const quantity = toInt(row.stock_initial || '0', 0)
-    const current = byReference.get(reference) || { quantity: 0 }
-    current.quantity += quantity
-    byReference.set(reference, current)
-  })
 
-  for (const [reference, data] of byReference.entries()) {
+    const productInfo = await getProductInfoByReference(reference, productCache)
+    if (!productInfo) {
+      console.log(`Stock: missing product for reference ${reference}`)
+      continue
+    }
+
+    const specificite = getSpecificite(row)
+    const karazany = row.karazany?.trim()
+    const quantity = toInt(row.stock_initial || '0', 0)
+
+    if (specificite && karazany) {
+      hasCombination.add(reference)
+      const groupId = await ensureProductOptionId(specificite, optionCache)
+      const valueId = await ensureProductOptionValueId(groupId, karazany, valueCache)
+      const salePrice = row.prix_vente_ttc
+        ? toFloat(row.prix_vente_ttc || '0', productInfo.price)
+        : productInfo.price
+      const combinationId = await ensureCombinationId(
+        productInfo,
+        valueId,
+        reference,
+        karazany,
+        salePrice,
+        combinationCache
+      )
+
+      if (!combinationId) {
+        console.log(`Stock: missing combination for ${reference} ${karazany}`)
+        continue
+      }
+
+      try {
+        await setQuantityForProductAttribute(productInfo.id, combinationId, quantity)
+        success += 1
+      } catch (error) {
+        console.log(`Stock ${reference} ${karazany}: ${error.message}`)
+        console.log(error)
+      }
+
+      const total = baseStockTotals.get(reference) || 0
+      baseStockTotals.set(reference, total + quantity)
+      continue
+    }
+
+    const total = baseStockTotals.get(reference) || 0
+    baseStockTotals.set(reference, total + quantity)
+  }
+
+  for (const [reference, total] of baseStockTotals.entries()) {
+    if (hasCombination.has(reference)) {
+      continue
+    }
     const productId = await findProductIdByReference(reference)
     if (!productId) {
       console.log(`Stock: missing product for reference ${reference}`)
       continue
     }
     try {
-      await setQuantityForProduct(productId, data.quantity)
+      await setQuantityForProduct(productId, total)
       success += 1
     } catch (error) {
       console.log(`Stock ${reference}: ${error.message}`)
+      console.log(error)
     }
   }
 
@@ -225,7 +282,7 @@ async function importOrders(rows) {
         await createOrderDetail({
           id_order: orderId,
           product_id: item.id,
-          product_attribute_id: 0,
+          product_attribute_id: item.productAttributeId || 0,
           product_name: lineName,
           product_reference: item.reference,
           product_quantity: item.quantity,
@@ -376,13 +433,25 @@ async function resolveOrderItems(items) {
       console.log(`Order: product not found ${item.reference}`)
       continue
     }
+    let productAttributeId = 0
+    let price = info.price
+    if (item.karazany) {
+      const combination = await findCombinationForKarazany(info.id, item.karazany)
+      if (combination) {
+        productAttributeId = combination.id
+        price = info.price + combination.priceImpact
+      } else {
+        console.log(`Order: combination not found ${item.reference} ${item.karazany}`)
+      }
+    }
     resolved.push({
       id: info.id,
       name: info.name || item.reference,
-      price: info.price,
+      price,
       reference: item.reference,
       quantity: item.quantity,
-      karazany: item.karazany
+      karazany: item.karazany,
+      productAttributeId
     })
   }
   return resolved
@@ -404,13 +473,96 @@ async function createCartForOrder(customerId, addressId, items, config) {
       cart_rows: {
         cart_row: items.map((item) => ({
           id_product: item.id,
-          id_product_attribute: 0,
+          id_product_attribute: item.productAttributeId || 0,
           id_address_delivery: addressId,
           quantity: item.quantity
         }))
       }
     }
   })
+}
+
+async function ensureProductOptionId(name, cache) {
+  const normalized = name.trim()
+  if (!normalized) {
+    throw new Error('Missing specificite')
+  }
+  if (cache.has(normalized)) {
+    return cache.get(normalized)
+  }
+  const existingId = await findProductOptionIdByName(normalized)
+  if (existingId) {
+    cache.set(normalized, existingId)
+    return existingId
+  }
+  const id = await createProductOption({ name: normalized })
+  cache.set(normalized, id)
+  return id
+}
+
+async function ensureProductOptionValueId(groupId, name, cache) {
+  const normalized = name.trim()
+  const key = `${groupId}:${normalized}`
+  if (cache.has(key)) {
+    return cache.get(key)
+  }
+  const existingId = await findProductOptionValueIdByName(normalized, groupId)
+  if (existingId) {
+    cache.set(key, existingId)
+    return existingId
+  }
+  const id = await createProductOptionValue({ groupId, name: normalized })
+  cache.set(key, id)
+  return id
+}
+
+async function ensureCombinationId(productInfo, valueId, reference, karazany, salePrice, cache) {
+  const key = `${productInfo.id}:${valueId}`
+  if (cache.has(key)) {
+    return cache.get(key)
+  }
+  const existing = await findCombinationByProductAndValueId(productInfo.id, valueId)
+  if (existing) {
+    cache.set(key, existing.id)
+    return existing.id
+  }
+  const priceImpact = formatMoney(salePrice - productInfo.price)
+  const combinationReference = `${reference}-${slugify(karazany)}`
+  const id = await createCombinationForProduct({
+    productId: productInfo.id,
+    valueIds: [valueId],
+    reference: combinationReference,
+    priceImpact
+  })
+  cache.set(key, id)
+  return id
+}
+
+async function findCombinationForKarazany(productId, karazany) {
+  if (!karazany) {
+    return null
+  }
+  const valueId = await findProductOptionValueIdByName(karazany)
+  if (!valueId) {
+    return null
+  }
+  return findCombinationByProductAndValueId(productId, valueId)
+}
+
+async function getProductInfoByReference(reference, cache) {
+  if (cache.has(reference)) {
+    return cache.get(reference)
+  }
+  const info = await findProductInfoByReference(reference)
+  if (info) {
+    cache.set(reference, info)
+  }
+  return info
+}
+
+function getSpecificite(row) {
+  const raw = row.specificite || row.specificit || row.specificite_ || ''
+  return String(raw || '').trim()
 }
 
 function computeOrderTotals(items) {

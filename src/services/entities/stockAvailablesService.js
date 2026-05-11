@@ -63,12 +63,42 @@ export async function findStockIdByProductId(productId) {
   return ids[0] ?? null
 }
 
+export async function findStockIdByProductAndAttribute(productId, productAttributeId) {
+  const xml = await getXml('stock_availables', {
+    display: '[id]',
+    'filter[id_product]': productId,
+    'filter[id_product_attribute]': productAttributeId
+  })
+  const doc = parseXml(xml)
+  const ids = extractIdsByTag(doc, 'stock_available')
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
+  return ids[0] ?? null
+}
+
 export async function setQuantityForProduct(productId, quantity) {
   const stockId = await findStockIdByProductId(productId)
   if (!stockId) {
     await createStockAvailable({
       id_product: productId,
       id_product_attribute: 0,
+      id_shop: 1,
+      id_shop_group: 0,
+      quantity,
+      depends_on_stock: 0,
+      out_of_stock: 2
+    })
+    return
+  }
+  await setStockQuantityById(stockId, quantity)
+}
+
+export async function setQuantityForProductAttribute(productId, productAttributeId, quantity) {
+  const stockId = await findStockIdByProductAndAttribute(productId, productAttributeId)
+  if (!stockId) {
+    await createStockAvailable({
+      id_product: productId,
+      id_product_attribute: productAttributeId,
       id_shop: 1,
       id_shop_group: 0,
       quantity,
