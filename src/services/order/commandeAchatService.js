@@ -145,20 +145,31 @@ export function parseOrderItems(raw) {
   if (!raw) {
     return []
   }
-  const normalized = raw.replace(/""/g, '"')
-  const items = []
-  const pattern = /\("([^"]*)"\s*;\s*([0-9]+)\s*;\s*"([^"]*)"\)/g
-  let match = null
-
-  while ((match = pattern.exec(normalized)) !== null) {
-    items.push({
-      reference: match[1],
-      quantity: toInt(match[2], 0),
-      karazany: match[3]
-    })
+  const rawText = String(raw).trim()
+  const needsUnescape = /""[^\"]+""/.test(rawText)
+  const normalized = needsUnescape ? rawText.replace(/""/g, '"') : rawText
+  const inner = normalized.replace(/^\s*\[\s*/, '').replace(/\s*\]\s*$/, '')
+  if (!inner) {
+    return []
   }
 
-  return items
+  const tuplePattern = /\([^()]*\)/g
+  const itemPattern = /^\(\s*"([^"]*)"\s*;\s*([0-9]+)\s*;\s*"([^"]*)"\s*\)$/
+
+  return (inner.match(tuplePattern) || [])
+    .map((tuple) => {
+      const match = tuple.match(itemPattern)
+      if (!match) {
+        return null
+      }
+
+      return {
+        reference: match[1].trim(),
+        quantity: toInt(match[2], 0),
+        karazany: match[3].trim()
+      }
+    })
+    .filter(Boolean)
 }
 
 async function ensureCustomer(row, config) {
@@ -244,6 +255,16 @@ async function resolveOrderItems(items) {
 }
 
 async function createCartForOrder(customerId, addressId, items, config) {
+  const cartRows = []
+  for (const item of items) {
+    cartRows.push({
+      id_product: item.id,
+      id_product_attribute: item.productAttributeId || 0,
+      id_address_delivery: addressId,
+      quantity: item.quantity
+    })
+  }
+
   return createCart({
     id_customer: customerId,
     id_address_delivery: addressId,
@@ -254,12 +275,7 @@ async function createCartForOrder(customerId, addressId, items, config) {
     id_shop_group: config.shopGroupId,
     associations: {
       cart_rows: {
-        cart_row: items.map((item) => ({
-          id_product: item.id,
-          id_product_attribute: item.productAttributeId || 0,
-          id_address_delivery: addressId,
-          quantity: item.quantity
-        }))
+        cart_row: cartRows
       }
     }
   })
