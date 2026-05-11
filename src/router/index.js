@@ -4,6 +4,7 @@ import BackOfficeHomeView from '@/views/backoffice/BackOfficeHomeView.vue'
 import BackOfficeLoginView from '@/views/backoffice/BackOfficeLoginView.vue'
 import DataImportView from '@/views/backoffice/DataImportView.vue'
 import DataResetView from '@/views/backoffice/DataResetView.vue'
+import BackOfficeOrdersView from '@/views/backoffice/BackOfficeOrdersView.vue'
 import { isBackOfficeAuthenticated, logoutBackOffice } from '@/services/backofficeAuth'
 
 const router = createRouter({
@@ -15,6 +16,7 @@ const router = createRouter({
     { path: '/backoffice/login', name: 'backoffice-login', component: BackOfficeLoginView },
     { path: '/backoffice',name: 'backoffice-home',component: BackOfficeHomeView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/import', name: 'backoffice-import',component: DataImportView, meta: { requiresBackOfficeAuth: true }},
+    { path: '/backoffice/orders', name: 'backoffice-orders', component: BackOfficeOrdersView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/reset',name: 'backoffice-reset',component: DataResetView, meta: { requiresBackOfficeAuth: true }}
   
   ],
