@@ -79,3 +79,7 @@ export function putXml(path, body, query) {
 export function deleteXml(path, query, ignore404 = false) {
   return requestXml(path, { method: 'DELETE', query, ignore404 })
 }
+
+export function buildApiUrl(path, query) {
+  return buildUrl(path, query)
+}

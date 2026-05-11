@@ -5,10 +5,11 @@ import { parseCsvFile } from '@/services/import/csvParser'
 import { runImport } from '@/services/import/importService'
 
 const rows = ref([])
+const imageFiles = ref([])
 const status = ref('')
 const isRunning = ref(false)
 
-async function onFileSelected(event) {
+async function onCsvSelected(event) {
   const input = event.target
   const file = input && input.files ? input.files[0] : null
   rows.value = []
@@ -21,7 +22,35 @@ async function onFileSelected(event) {
   status.value = `CSV charge: ${rows.value.length} lignes`
 }
 
+function onImagesSelected(event) {
+  const input = event.target
+  imageFiles.value = input && input.files ? Array.from(input.files) : []
+  if (imageFiles.value.length) {
+    status.value = `Images chargees: ${imageFiles.value.length}`
+  }
+}
+
 async function startImport(target) {
+  if (target === 'images') {
+    if (!imageFiles.value.length) {
+      status.value = 'Charge les images a importer.'
+      return
+    }
+    isRunning.value = true
+    status.value = 'Import images en cours...'
+    runImport({ target, files: imageFiles.value })
+      .then((summary) => {
+        status.value = `Import images termine: ${summary.success} OK.`
+      })
+      .catch((error) => {
+        status.value = error.message
+      })
+      .finally(() => {
+        isRunning.value = false
+      })
+    return
+  }
+
   if (!rows.value.length) {
     status.value = 'Charge un fichier CSV d abord.'
     return
@@ -43,21 +72,33 @@ async function startImport(target) {
 
 <template>
   <div class="stack">
+    <SectionHeader
+      eyebrow="BackOffice"
+      title="Import data"
+      subtitle="Import des CSV produits, stock, commandes et images produits."
+    />
 
     <div class="panel">
       <label class="field">
         <span>Fichier CSV</span>
-        <input type="file" accept=".csv,text/csv" @change="onFileSelected" />
+        <input type="file" accept=".csv,text/csv" @change="onCsvSelected" />
+      </label>
+      <label class="field">
+        <span>Images produits</span>
+        <input type="file" accept="image/*" multiple @change="onImagesSelected" />
       </label>
       <div class="actions">
         <button class="secondary" :disabled="isRunning" @click="startImport('products')">
-          Import produits
-        </button>
-        <button class="secondary" :disabled="isRunning" @click="startImport('categories')">
-          Import categories
+          Import produits (CSV)
         </button>
         <button class="secondary" :disabled="isRunning" @click="startImport('stocks')">
-          Import stocks
+          Import stock (CSV)
+        </button>
+        <button class="secondary" :disabled="isRunning" @click="startImport('orders')">
+          Import commandes (CSV)
+        </button>
+        <button class="secondary" :disabled="isRunning" @click="startImport('images')">
+          Import images
         </button>
       </div>
       <p v-if="status" class="status">{{ status }}</p>

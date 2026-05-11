@@ -1,87 +1,86 @@
 import { DEFAULT_CATEGORY_ID, DEFAULT_LANG_ID } from '@/services/constants'
-import { createCategory, listCategoryIds } from '@/services/entities/categoriesService'
-import { createProduct, findProductIdByReference, listProductIds } from '@/services/entities/productsService'
+import { createCategory, findCategoryIdByName, listCategoryIds } from '@/services/entities/categoriesService'
+import {
+  createProduct,
+  findProductIdByReference,
+  findProductInfoByReference,
+  listProductIds,
+  updateProduct
+} from '@/services/entities/productsService'
 import { listStockAvailableIds, setQuantityForProduct } from '@/services/entities/stockAvailablesService'
+import { uploadProductImage } from '@/services/entities/imagesService'
+import { createCustomer, findCustomerIdByEmail } from '@/services/entities/customersService'
+import { createAddress } from '@/services/entities/addressesService'
+import { createCart } from '@/services/entities/cartsService'
+import { createOrder } from '@/services/entities/ordersService'
+import { createOrderDetail } from '@/services/entities/orderDetailsService'
+import { createOrderHistory } from '@/services/entities/orderHistoriesService'
+import { getXml } from '@/services/http/prestashopClient'
 import { slugify, toFloat, toInt } from '@/services/utils/stringUtils'
+import { getText, parseXml } from '@/services/xml/xmlUtils'
 
-export async function runImport({ target, rows }) {
+export async function runImport({ target, rows = [], files = [] }) {
+  if (target === 'images') {
+    return importImages(files)
+  }
+  if (!Array.isArray(rows)) {
+    throw new Error('CSV rows are missing')
+  }
+
+  if (target === 'products') {
+    return importProducts(rows)
+  }
+  if (target === 'stocks') {
+    return importStocks(rows)
+  }
+  if (target === 'orders') {
+    return importOrders(rows)
+  }
+
+  return { total: rows.length, success: 0 }
+}
+
+async function importProducts(rows) {
   let success = 0
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index]
+    const name = row.nom?.trim()
+    const reference = row.reference?.trim()
 
-    if (target === 'products') {
-      const name = row.name?.trim()
-      if (!name) {
-        console.log(`Row ${index + 1}: missing product name`)
-        continue
-      }
-      const input = {
-        name,
-        price: toFloat(row.price || '0', 0),
-        reference: row.reference || '',
-        categoryId: DEFAULT_CATEGORY_ID,
-        linkRewrite: row.link_rewrite || slugify(name)
-      }
-      const quantity = row.quantity ? toInt(row.quantity, 0) : null
-
-      try {
-        const productId = await createProduct(input, DEFAULT_LANG_ID)
-        console.log(`Product created: ${productId}`)
-        if (quantity !== null) {
-          await setQuantityForProduct(productId, quantity)
-        }
-        success += 1
-      } catch (error) {
-        console.log(`Row ${index + 1}: ${error.message}`)
-      }
+    if (!name || !reference) {
+      console.log(`Row ${index + 1}: missing nom or reference`)
+      continue
     }
 
-    if (target === 'categories') {
-      const name = row.name?.trim()
-      if (!name) {
-        console.log(`Row ${index + 1}: missing category name`)
-        continue
-      }
-      const input = {
-        name,
-        parentId: row.parent_id ? toInt(row.parent_id, DEFAULT_CATEGORY_ID) : DEFAULT_CATEGORY_ID,
-        description: row.description || '',
-        linkRewrite: row.link_rewrite || slugify(name)
-      }
+    const categoryName = row.categorie?.trim()
+    const categoryId = await ensureCategoryId(categoryName)
+    const availableDate = toIsoDate(row.date_produit)
 
-      try {
-        await createCategory(input, DEFAULT_LANG_ID)
-        success += 1
-      } catch (error) {
-        console.log(`Row ${index + 1}: ${error.message}`)
-      }
+    const input = {
+      name,
+      reference,
+      price: toFloat(row.prix_ttc || '0', 0),
+      wholesalePrice: toFloat(row.prix_achat || '0', 0),
+      categoryId,
+      availableDate,
+      linkRewrite: slugify(name)
     }
 
-    if (target === 'stocks') {
-      let productId = toInt(row.product_id || '', 0)
-      const quantity = toInt(row.quantity || '0', 0)
-      const reference = row.reference || row.sku || row.ref || ''
-
-      if (!productId && reference) {
-        productId = await findProductIdByReference(reference)
+    try {
+      const existingId = await findProductIdByReference(reference)
+      if (existingId) {
+        await updateProduct(existingId, input, DEFAULT_LANG_ID)
+      } else {
+        await createProduct(input, DEFAULT_LANG_ID)
       }
-
-      if (!productId) {
-        console.log(`Row ${index + 1}: missing product_id or reference`) 
-        continue
-      }
-
-      try {
-        await setQuantityForProduct(productId, quantity)
-        success += 1
-      } catch (error) {
-        console.log(`Row ${index + 1}: ${error.message}`)
-      }
+      success += 1
+    } catch (error) {
+      console.log(`Row ${index + 1}: ${error.message}`)
     }
   }
 
-  verifyLists(target)
+  verifyLists('products')
 
   return {
     total: rows.length,
@@ -89,14 +88,421 @@ export async function runImport({ target, rows }) {
   }
 }
 
+async function importStocks(rows) {
+  let success = 0
+  const byReference = new Map()
+
+  rows.forEach((row) => {
+    const reference = row.reference?.trim()
+    if (!reference) {
+      return
+    }
+    const quantity = toInt(row.stock_initial || '0', 0)
+    const current = byReference.get(reference) || { quantity: 0 }
+    current.quantity += quantity
+    byReference.set(reference, current)
+  })
+
+  for (const [reference, data] of byReference.entries()) {
+    const productId = await findProductIdByReference(reference)
+    if (!productId) {
+      console.log(`Stock: missing product for reference ${reference}`)
+      continue
+    }
+    try {
+      await setQuantityForProduct(productId, data.quantity)
+      success += 1
+    } catch (error) {
+      console.log(`Stock ${reference}: ${error.message}`)
+    }
+  }
+
+  verifyLists('stocks')
+
+  return {
+    total: rows.length,
+    success
+  }
+}
+
+async function importImages(files) {
+  let success = 0
+  const list = Array.from(files || [])
+
+  for (let index = 0; index < list.length; index += 1) {
+    const file = list[index]
+    const reference = getReferenceFromFilename(file.name)
+    if (!reference) {
+      console.log(`Image ${file.name}: missing reference`)
+      continue
+    }
+    const productId = await findProductIdByReference(reference)
+    if (!productId) {
+      console.log(`Image ${file.name}: product not found`)
+      continue
+    }
+    try {
+      await uploadProductImage(productId, file)
+      success += 1
+    } catch (error) {
+      console.log(`Image ${file.name}: ${error.message}`)
+    }
+  }
+
+  return {
+    total: list.length,
+    success
+  }
+}
+
+async function importOrders(rows) {
+  let success = 0
+  const config = getOrderConfig()
+  validateOrderConfig(config)
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
+    try {
+      const orderItems = parseOrderItems(row.achat)
+      if (!orderItems.length) {
+        console.log(`Row ${index + 1}: empty achat`)
+        continue
+      }
+
+      const customerId = await ensureCustomer(row, config)
+      const secureKey = await fetchCustomerSecureKey(customerId)
+      if (!secureKey) {
+        throw new Error('Missing secure_key for customer')
+      }
+      const addressId = await createAddressForCustomer(customerId, row, config)
+      const resolvedItems = await resolveOrderItems(orderItems)
+
+      if (!resolvedItems.length) {
+        console.log(`Row ${index + 1}: no valid products`)
+        continue
+      }
+
+      const cartId = await createCartForOrder(customerId, addressId, resolvedItems, config)
+      const totals = computeOrderTotals(resolvedItems)
+      const orderStateId = resolveOrderStateId(row.etat, config)
+
+      const orderId = await createOrder({
+        id_cart: cartId,
+        id_currency: config.currencyId,
+        id_lang: config.langId,
+        id_customer: customerId,
+        id_address_delivery: addressId,
+        id_address_invoice: addressId,
+        id_carrier: config.carrierId,
+        id_shop: config.shopId,
+        id_shop_group: config.shopGroupId,
+        current_state: orderStateId,
+        payment: 'Paiement a la livraison',
+        module: config.cashModule,
+        total_paid: totals.totalPaid,
+        total_paid_real: totals.totalPaid,
+        total_paid_tax_incl: totals.totalPaid,
+        total_paid_tax_excl: totals.totalPaid,
+        total_products: totals.totalProducts,
+        total_products_wt: totals.totalProducts,
+        total_discounts: totals.totalDiscounts,
+        total_discounts_tax_incl: totals.totalDiscounts,
+        total_discounts_tax_excl: totals.totalDiscounts,
+        total_shipping: totals.totalShipping,
+        total_shipping_tax_incl: totals.totalShipping,
+        total_shipping_tax_excl: totals.totalShipping,
+        total_wrapping: totals.totalWrapping,
+        total_wrapping_tax_incl: totals.totalWrapping,
+        total_wrapping_tax_excl: totals.totalWrapping,
+        secure_key: secureKey,
+        conversion_rate: 1
+      })
+
+      for (const item of resolvedItems) {
+        const lineName = item.karazany ? `${item.name} (${item.karazany})` : item.name
+        const unitPrice = formatMoney(item.price)
+        const lineTotal = formatMoney(item.price * item.quantity)
+        await createOrderDetail({
+          id_order: orderId,
+          product_id: item.id,
+          product_attribute_id: 0,
+          product_name: lineName,
+          product_reference: item.reference,
+          product_quantity: item.quantity,
+          product_price: unitPrice,
+          unit_price_tax_incl: unitPrice,
+          unit_price_tax_excl: unitPrice,
+          total_price_tax_incl: lineTotal,
+          total_price_tax_excl: lineTotal,
+          id_shop: config.shopId
+        })
+      }
+
+      if (orderStateId) {
+        await createOrderHistory({
+          id_order: orderId,
+          id_order_state: orderStateId
+        })
+      }
+
+      success += 1
+    } catch (error) {
+      console.log(`Row ${index + 1}: ${error.message}`)
+    }
+  }
+
+  return {
+    total: rows.length,
+    success
+  }
+}
+
+async function ensureCategoryId(name) {
+  if (!name) {
+    return DEFAULT_CATEGORY_ID
+  }
+  const existingId = await findCategoryIdByName(name)
+  if (existingId) {
+    return existingId
+  }
+  const newId = await createCategory(
+    {
+      name,
+      parentId: DEFAULT_CATEGORY_ID,
+      description: '',
+      linkRewrite: slugify(name)
+    },
+    DEFAULT_LANG_ID
+  )
+  return newId
+}
+
+function toIsoDate(raw) {
+  if (!raw) {
+    return ''
+  }
+  const parts = raw.split('/')
+  if (parts.length !== 3) {
+    return ''
+  }
+  const [day, month, year] = parts
+  if (!day || !month || !year) {
+    return ''
+  }
+  return `${year.padStart(4, '0')}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+}
+
+function getReferenceFromFilename(filename) {
+  const lastDot = filename.lastIndexOf('.')
+  const base = lastDot === -1 ? filename : filename.slice(0, lastDot)
+  return base.trim()
+}
+
+function parseOrderItems(raw) {
+  if (!raw) {
+    return []
+  }
+  const normalized = raw.replace(/""/g, '"')
+  const items = []
+  const pattern = /\("([^"]*)"\s*;\s*([0-9]+)\s*;\s*"([^"]*)"\)/g
+  let match = null
+
+  while ((match = pattern.exec(normalized)) !== null) {
+    items.push({
+      reference: match[1],
+      quantity: toInt(match[2], 0),
+      karazany: match[3]
+    })
+  }
+
+  return items
+}
+
+async function ensureCustomer(row, config) {
+  const email = row.email?.trim()
+  if (!email) {
+    throw new Error('Missing email')
+  }
+  const existingId = await findCustomerIdByEmail(email)
+  if (existingId) {
+    return existingId
+  }
+  const name = row.nom?.trim() || 'Client'
+  const nameParts = name.split(' ').filter(Boolean)
+  const firstname = nameParts.shift() || name
+  const lastname = nameParts.join(' ') || name
+  const password = row.pwd?.trim() || 'changeme'
+
+  return createCustomer({
+    id_lang: config.langId,
+    id_shop: config.shopId,
+    id_shop_group: config.shopGroupId,
+    id_default_group: config.customerGroupId,
+    firstname,
+    lastname,
+    email,
+    passwd: password,
+    active: 1
+  })
+}
+
+async function createAddressForCustomer(customerId, row, config) {
+  if (!config.countryId) {
+    throw new Error('Missing VITE_DEFAULT_COUNTRY_ID')
+  }
+  const name = row.nom?.trim() || 'Client'
+  const nameParts = name.split(' ').filter(Boolean)
+  const firstname = nameParts.shift() || name
+  const lastname = nameParts.join(' ') || name
+
+  return createAddress({
+    id_customer: customerId,
+    id_country: config.countryId,
+    id_state: config.stateId,
+    alias: 'Import',
+    firstname,
+    lastname,
+    address1: row.adresse?.trim() || 'N/A',
+    city: config.defaultCity,
+    postcode: config.defaultPostcode
+  })
+}
+
+async function resolveOrderItems(items) {
+  const resolved = []
+  for (const item of items) {
+    const info = await findProductInfoByReference(item.reference)
+    if (!info) {
+      console.log(`Order: product not found ${item.reference}`)
+      continue
+    }
+    resolved.push({
+      id: info.id,
+      name: info.name || item.reference,
+      price: info.price,
+      reference: item.reference,
+      quantity: item.quantity,
+      karazany: item.karazany
+    })
+  }
+  return resolved
+}
+
+async function createCartForOrder(customerId, addressId, items, config) {
+  if (!config.currencyId) {
+    throw new Error('Missing VITE_DEFAULT_CURRENCY_ID')
+  }
+  return createCart({
+    id_customer: customerId,
+    id_address_delivery: addressId,
+    id_address_invoice: addressId,
+    id_currency: config.currencyId,
+    id_lang: config.langId,
+    id_shop: config.shopId,
+    id_shop_group: config.shopGroupId,
+    associations: {
+      cart_rows: {
+        cart_row: items.map((item) => ({
+          id_product: item.id,
+          id_product_attribute: 0,
+          id_address_delivery: addressId,
+          quantity: item.quantity
+        }))
+      }
+    }
+  })
+}
+
+function computeOrderTotals(items) {
+  const totalProductsValue = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const totalProducts = formatMoney(totalProductsValue)
+  return {
+    totalProducts,
+    totalPaid: totalProducts,
+    totalDiscounts: formatMoney(0),
+    totalShipping: formatMoney(0),
+    totalWrapping: formatMoney(0)
+  }
+}
+
+function formatMoney(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return '0.00'
+  }
+  return numeric.toFixed(2)
+}
+
+function resolveOrderStateId(status, config) {
+  const normalized = normalizeStatus(status)
+  if (normalized.includes('accepte')) {
+    return config.orderStatePaidId
+  }
+  if (normalized.includes('erreur')) {
+    return config.orderStateErrorId
+  }
+  return config.orderStatePendingId
+}
+
+function normalizeStatus(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function getOrderConfig() {
+  return {
+    langId: toInt(import.meta.env.VITE_DEFAULT_LANG_ID || DEFAULT_LANG_ID, DEFAULT_LANG_ID),
+    shopId: toInt(import.meta.env.VITE_DEFAULT_SHOP_ID || '1', 1),
+    shopGroupId: toInt(import.meta.env.VITE_DEFAULT_SHOP_GROUP_ID || '1', 1),
+    currencyId: toInt(import.meta.env.VITE_DEFAULT_CURRENCY_ID || '1', 1),
+    countryId: toInt(import.meta.env.VITE_DEFAULT_COUNTRY_ID || '0', 0),
+    stateId: toInt(import.meta.env.VITE_DEFAULT_STATE_ID || '0', 0),
+    customerGroupId: toInt(import.meta.env.VITE_DEFAULT_CUSTOMER_GROUP_ID || '3', 3),
+    carrierId: toInt(import.meta.env.VITE_DEFAULT_CARRIER_ID || '0', 0),
+    defaultCity: (import.meta.env.VITE_DEFAULT_CITY || 'City').trim(),
+    defaultPostcode: (import.meta.env.VITE_DEFAULT_POSTCODE || '00000').trim(),
+    cashModule: (import.meta.env.VITE_CASH_MODULE || 'ps_cashondelivery').trim(),
+    orderStatePendingId: toInt(import.meta.env.VITE_ORDER_STATE_PENDING_ID || '0', 0),
+    orderStatePaidId: toInt(import.meta.env.VITE_ORDER_STATE_PAID_ID || '0', 0),
+    orderStateErrorId: toInt(import.meta.env.VITE_ORDER_STATE_ERROR_ID || '0', 0)
+  }
+}
+
+function validateOrderConfig(config) {
+  if (!config.currencyId) {
+    throw new Error('Missing VITE_DEFAULT_CURRENCY_ID')
+  }
+  if (!config.langId) {
+    throw new Error('Missing VITE_DEFAULT_LANG_ID')
+  }
+  if (!config.shopId) {
+    throw new Error('Missing VITE_DEFAULT_SHOP_ID')
+  }
+  if (!config.shopGroupId) {
+    throw new Error('Missing VITE_DEFAULT_SHOP_GROUP_ID')
+  }
+  if (!config.carrierId) {
+    throw new Error('Missing VITE_DEFAULT_CARRIER_ID')
+  }
+  if (!config.orderStatePendingId) {
+    throw new Error('Missing VITE_ORDER_STATE_PENDING_ID')
+  }
+}
+
+async function fetchCustomerSecureKey(customerId) {
+  const xml = await getXml(`customers/${customerId}`)
+  const doc = parseXml(xml)
+  return getText(doc, 'secure_key')
+}
+
 function verifyLists(target) {
   if (target === 'products') {
     listProductIds()
       .then((ids) => console.log(`Products count: ${ids.length}`))
       .catch((error) => console.log(error.message))
-    return
-  }
-  if (target === 'categories') {
     listCategoryIds()
       .then((ids) => console.log(`Categories count: ${ids.length}`))
       .catch((error) => console.log(error.message))

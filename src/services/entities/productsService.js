@@ -1,7 +1,7 @@
 import { DEFAULT_CATEGORY_ID, DEFAULT_LANG_ID } from '@/services/constants'
 import { deleteXml, getXml, postXml, putXml } from '@/services/http/prestashopClient'
 import { fetchAllIds } from '@/services/entities/entityUtils'
-import { buildEntityXml, extractIdsByTag, getIdFromXml, langField, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
+import { buildEntityXml, extractIdsByTag, getIdFromXml, getText, langField, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
 import { slugify } from '@/services/utils/stringUtils'
 
 export function listProductIds() {
@@ -39,6 +39,32 @@ export async function findProductIdByReference(reference) {
   return ids[0] ?? null
 }
 
+export async function findProductInfoByReference(reference) {
+  if (!reference) {
+    return null
+  }
+  const xml = await getXml('products', {
+    display: '[id,reference,price,name]',
+    'filter[reference]': reference
+  })
+  const doc = parseXml(xml)
+  const node = doc.querySelector('product')
+  if (!node) {
+    return null
+  }
+  const id = Number.parseInt(node.getAttribute('id') || getText(node, 'id'), 10)
+  if (!Number.isFinite(id)) {
+    return null
+  }
+  const name = getText(node, 'name')
+  const price = Number.parseFloat(getText(node, 'price') || '0')
+  return {
+    id,
+    name,
+    price: Number.isFinite(price) ? price : 0
+  }
+}
+
 export async function updateProduct(id, data, langId = DEFAULT_LANG_ID) {
   const payload = buildProductPayload({ ...data, id }, langId)
   const xml = buildEntityXml('product', payload)
@@ -56,6 +82,10 @@ function buildProductPayload(data, langId) {
   const descriptionShort = data.descriptionShort ?? ''
   const reference = data.reference ?? ''
   const price = Number.isFinite(Number(data.price)) ? Number(data.price).toFixed(2) : '0.00'
+  const wholesalePrice = Number.isFinite(Number(data.wholesalePrice))
+    ? Number(data.wholesalePrice).toFixed(2)
+    : undefined
+  const availableDate = data.availableDate ? data.availableDate : undefined
   const active = data.active === false ? 0 : 1
   const categoryId = data.categoryId ?? DEFAULT_CATEGORY_ID
   const minimalQuantity = data.minimalQuantity ?? 1
@@ -75,6 +105,8 @@ function buildProductPayload(data, langId) {
     description: langField(description, langId),
     description_short: langField(descriptionShort, langId),
     reference,
+    wholesale_price: wholesalePrice,
+    available_date: availableDate,
     minimal_quantity: minimalQuantity,
     show_price: 1,
     available_for_order: 1,
