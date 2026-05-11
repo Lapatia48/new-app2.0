@@ -43,11 +43,6 @@ async function startImport(target) {
 
 <template>
   <div class="stack">
-    <SectionHeader
-      eyebrow="Import"
-      title="Import CSV"
-      subtitle="Importe produits ou categories via l API PrestaShop en XML uniquement."
-    />
 
     <div class="panel">
       <label class="field">
@@ -108,16 +103,6 @@ async function startImport(target) {
   flex-wrap: wrap;
 }
 
-.primary {
-  padding: 0.5rem 1.1rem;
-  border-radius: 6px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 .secondary {
   padding: 0.5rem 1.1rem;
   border-radius: 6px;
@@ -128,7 +113,7 @@ async function startImport(target) {
   cursor: pointer;
 }
 
-.primary:disabled {
+.secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -5,30 +5,16 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <div class="app-shell">
     <header class="app-header">
-      <div class="brand">
-        <div class="brand-mark">PS</div>
-        <div>
-          <p class="brand-title">Presta Data Studio</p>
-          <p class="brand-subtitle">XML-first data tools</p>
-        </div>
-      </div>
+
       <nav class="nav">
-        <RouterLink to="/data" class="nav-link">Data</RouterLink>
-        <RouterLink to="/data/import" class="nav-link">Import CSV</RouterLink>
-        <RouterLink to="/data/reset" class="nav-link">Reset Data</RouterLink>
+        <RouterLink to="/backoffice" class="nav-link">BackOffice</RouterLink>
+        <RouterLink to="/frontoffice" class="nav-link">FrontOffice</RouterLink>
       </nav>
-      <div class="header-meta">
-        <span class="meta-pill">XML only</span>
-      </div>
     </header>
 
     <main class="app-main">
       <RouterView />
     </main>
-
-    <footer class="app-footer">
-      <span>PrestaShop data tooling built on Vue 3</span>
-    </footer>
   </div>
 </template>
 
@@ -44,8 +30,8 @@ import { RouterLink, RouterView } from 'vue-router'
 
 :global(body) {
   margin: 0;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: #f3f4f6;
+  font-family: Arial, sans-serif;
+  background: #f5f5f5;
   color: var(--text);
 }
 
@@ -62,12 +48,11 @@ import { RouterLink, RouterView } from 'vue-router'
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
 .app-header {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 1rem;
   padding: 1rem clamp(1rem, 4vw, 2rem);
@@ -130,31 +115,9 @@ import { RouterLink, RouterView } from 'vue-router'
   border-color: var(--accent);
 }
 
-.header-meta {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.meta-pill {
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  padding: 0.3rem 0.6rem;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-}
-
 .app-main {
   padding: 0 clamp(1rem, 4vw, 2rem) 1.5rem;
   flex: 1;
-}
-
-.app-footer {
-  padding: 1rem clamp(1rem, 4vw, 2rem) 1.5rem;
-  color: var(--muted);
-  font-size: 0.85rem;
 }
 
 @media (max-width: 900px) {
@@ -164,10 +127,6 @@ import { RouterLink, RouterView } from 'vue-router'
   }
 
   .nav {
-    justify-content: flex-start;
-  }
-
-  .header-meta {
     justify-content: flex-start;
   }
 }
