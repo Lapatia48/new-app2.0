@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import FrontOfficeLayout from '@/views/frontOffice/FrontOfficeLayout.vue'
 import FrontOfficeHomeView from '@/views/frontOffice/FrontOfficeHomeView.vue'
+import FrontOfficeUsersView from '@/views/frontOffice/FrontOfficeUsersView.vue'
 import FrontOfficeCartView from '@/views/frontOffice/FrontOfficeCartView.vue'
 import FrontOfficeCheckoutView from '@/views/frontOffice/FrontOfficeCheckoutView.vue'
 import FrontOfficeAccountView from '@/views/frontOffice/FrontOfficeAccountView.vue'
@@ -16,12 +17,13 @@ import { isBackOfficeAuthenticated, logoutBackOffice } from '@/services/backoffi
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/frontoffice/catalog' },
+    { path: '/', redirect: '/frontoffice' },
     {
       path: '/frontoffice',
       component: FrontOfficeLayout,
       children: [
-        { path: '', redirect: '/frontoffice/catalog' },
+        { path: '', redirect: '/frontoffice/users' },
+        { path: 'users', name: 'frontoffice-users', component: FrontOfficeUsersView },
         { path: 'catalog', name: 'frontoffice-catalog', component: FrontOfficeHomeView },
         { path: 'cart', name: 'frontoffice-cart', component: FrontOfficeCartView },
         { path: 'checkout', name: 'frontoffice-checkout', component: FrontOfficeCheckoutView },

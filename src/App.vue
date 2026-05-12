@@ -8,7 +8,7 @@ import { RouterLink, RouterView } from 'vue-router'
 
       <nav class="nav">
         <RouterLink to="/backoffice" class="nav-link">BackOffice</RouterLink>
-        <RouterLink to="/frontoffice/catalog" class="nav-link">FrontOffice</RouterLink>
+        <RouterLink to="/frontoffice" class="nav-link">FrontOffice</RouterLink>
       </nav>
     </header>
 

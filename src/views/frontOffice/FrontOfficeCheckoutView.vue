@@ -37,6 +37,9 @@ watch(
   (value) => {
     if (value && !customer.value) {
       customer.value = value
+      if (step.value === 1) {
+        step.value = 2
+      }
     }
   },
   { immediate: true }
