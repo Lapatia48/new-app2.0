@@ -1,5 +1,5 @@
 import { getXml, buildApiUrl } from '@/services/http/prestashopClient'
-import { xmlToJson, parseXml } from '@/services/xml/xmlUtils'
+import { xmlToJson, parseXml, extractIdsByTag } from '@/services/xml/xmlUtils'
 import { listOrderIds } from '@/services/entities/ordersService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
 import { buildOrderConfig } from '@/services/order/commandeAchatService'
@@ -52,8 +52,7 @@ function formatStateLabel(stateId, config) {
   const id = toNumber(stateId, 0)
   if (id && id === toNumber(config.orderStatePaidId, 0)) return 'acceptee'
   if (id && id === toNumber(config.orderStateErrorId, 0)) return 'echec'
-  if (id && id === toNumber(config.orderStatePendingId, 0)) return 'en attente'
-  return `etat #${id || 0}`
+  return 'en attente'
 }
 
 function getCustomerDisplayName(customer) {
@@ -229,6 +228,34 @@ export async function listGestionCommandes() {
     ids.map(async (id) => {
       try {
         return await buildGestionCommandeDto(id)
+      } catch (error) {
+        return null
+      }
+    })
+  )
+
+  return list
+    .filter(Boolean)
+    .sort((a, b) => (b.summary?.id || 0) - (a.summary?.id || 0))
+}
+
+export async function listGestionCommandesByCustomer(customerId) {
+  const id = toNumber(customerId, 0)
+  if (!id) {
+    return []
+  }
+  const xml = await getXml('orders', {
+    display: '[id]','filter[id_customer]': id
+  })
+  const doc = parseXml(xml)
+  const ids = extractIdsByTag(doc, 'order')
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
+
+  const list = await Promise.all(
+    ids.map(async (orderId) => {
+      try {
+        return await buildGestionCommandeDto(orderId)
       } catch (error) {
         return null
       }
