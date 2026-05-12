@@ -7,11 +7,17 @@ import { useCartStore } from '@/services/frontoffice/cartStore'
 import { listProductVariants, buildSpecificiteOptions } from '@/services/frontoffice/productVariantsService'
 
 const products = ref([])
+const categories = ref([])
 const loading = ref(false)
+const categoriesLoading = ref(false)
 const error = ref('')
 const notice = ref('')
 const selected = ref(null)
 const filterSpecificite = ref('')
+const filterName = ref('')
+const filterCategory = ref('')
+const filterPriceMin = ref('')
+const filterPriceMax = ref('')
 
 const { addItem } = useCartStore()
 
@@ -22,6 +28,52 @@ function pickLangText(node, selector) {
 function toNumber(value, fallback = 0) {
   const parsed = Number.parseFloat(String(value ?? ''))
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function toNumberOrNull(value) {
+  const raw = String(value ?? '').replace(',', '.').trim()
+  if (!raw) {
+    return null
+  }
+  const parsed = Number.parseFloat(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseAvailableDate(value) {
+  const raw = String(value || '').trim()
+  if (!raw || raw === '0000-00-00' || raw === '0000-00-00 00:00:00') {
+    return null
+  }
+  const normalized = raw.includes('T')
+    ? raw
+    : raw.includes(' ')
+      ? raw.replace(' ', 'T')
+      : `${raw}T00:00:00`
+  const parsed = new Date(normalized)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getBadge(product) {
+  const date = parseAvailableDate(product.availableDate)
+  if (!date) {
+    return null
+  }
+  const diffMs = Date.now() - date.getTime()
+  if (diffMs < 0) {
+    return null
+  }
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays <= 1) {
+    return 'HOT'
+  }
+  else if (diffDays <= 7) {
+    return 'NEW'
+  }
+  return null
+}
+
+function badgeClass(label) {
+  return label === 'HOT' ? 'hot' : 'new'
 }
 
 function formatMoney(value) {
@@ -73,15 +125,49 @@ const availableSpecificites = computed(() => {
   return Array.from(map.values())
 })
 
-const filteredProducts = computed(() => {
-  if (!filterSpecificite.value) {
-    return products.value
+const categoryMap = computed(() => {
+  const map = new Map()
+  categories.value.forEach((category) => {
+    if (category?.id) {
+      map.set(String(category.id), category.name || '')
+    }
+  })
+  return map
+})
+
+function getCategoryName(product) {
+  if (!product?.categoryId) {
+    return ''
   }
-  return products.value.filter((product) =>
-    (product.specificites || []).some(
-      (group) => String(group.id) === String(filterSpecificite.value)
-    )
-  )
+  return categoryMap.value.get(String(product.categoryId)) || ''
+}
+
+const filteredProducts = computed(() => {
+  const nameQuery = filterName.value.trim().toLowerCase()
+  const categoryId = String(filterCategory.value || '').trim()
+  const minPrice = toNumberOrNull(filterPriceMin.value)
+  const maxPrice = toNumberOrNull(filterPriceMax.value)
+
+  return products.value.filter((product) => {
+    if (nameQuery && !String(product.name || '').toLowerCase().includes(nameQuery)) {
+      return false
+    }
+    if (categoryId && String(product.categoryId || '') !== categoryId) {
+      return false
+    }
+    if (minPrice !== null && product.price < minPrice) {
+      return false
+    }
+    if (maxPrice !== null && product.price > maxPrice) {
+      return false
+    }
+    if (filterSpecificite.value) {
+      return (product.specificites || []).some(
+        (group) => String(group.id) === String(filterSpecificite.value)
+      )
+    }
+    return true
+  })
 })
 
 watch(filterSpecificite, (value) => {
@@ -104,7 +190,7 @@ async function loadProducts() {
   error.value = ''
   try {
     const xml = await getXml('products', {
-      display: '[id,reference,price,name,description_short]',
+      display: '[id,reference,price,name,description_short,id_category_default,available_date]',
       limit: '0,1000'
     })
     const doc = parseXml(xml)
@@ -119,7 +205,9 @@ async function loadProducts() {
         const description = pickLangText(node, 'description_short')
         const reference = getText(node, 'reference')
         const price = toNumber(getText(node, 'price'), 0)
-        return { id, name, description, reference, price, imageUrl: null }
+        const categoryId = toNumber(getText(node, 'id_category_default'), null)
+        const availableDate = getText(node, 'available_date')
+        return { id, name, description, reference, price, categoryId, availableDate, imageUrl: null }
       })
       .filter(Boolean)
 
@@ -146,6 +234,32 @@ async function loadProducts() {
     error.value = err?.message || 'Erreur chargement produits.'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadCategories() {
+  categoriesLoading.value = true
+  try {
+    const xml = await getXml('categories', {
+      display: '[id,name]',
+      limit: '0,1000'
+    })
+    const doc = parseXml(xml)
+    const nodes = Array.from(doc.querySelectorAll('category'))
+    categories.value = nodes
+      .map((node) => {
+        const id = toNumber(node.getAttribute('id') || getText(node, 'id'), null)
+        if (!id) {
+          return null
+        }
+        const name = pickLangText(node, 'name') || `Categorie #${id}`
+        return { id, name }
+      })
+      .filter(Boolean)
+  } catch {
+    categories.value = []
+  } finally {
+    categoriesLoading.value = false
   }
 }
 
@@ -190,6 +304,7 @@ function closeDetails() {
 
 onMounted(() => {
   loadProducts()
+  loadCategories()
 })
 </script>
 
@@ -197,7 +312,7 @@ onMounted(() => {
   <section class="page">
     <header class="page-header">
       <div>
-        <h2>Accueil</h2>
+        <h2>Catalogue</h2>
         <p>Catalogue des produits disponibles.</p>
       </div>
       <div class="actions">
@@ -206,6 +321,27 @@ onMounted(() => {
     </header>
 
     <div class="filters">
+      <label class="filter">
+        Nom
+        <input v-model="filterName" type="search" placeholder="Nom du produit" />
+      </label>
+      <label class="filter">
+        Categorie
+        <select v-model="filterCategory" :disabled="categoriesLoading">
+          <option value="">Toutes</option>
+          <option v-for="category in categories" :key="category.id" :value="category.id">
+            {{ category.name }}
+          </option>
+        </select>
+      </label>
+      <label class="filter">
+        Prix min
+        <input v-model="filterPriceMin" type="number" min="0" step="0.01" />
+      </label>
+      <label class="filter">
+        Prix max
+        <input v-model="filterPriceMax" type="number" min="0" step="0.01" />
+      </label>
       <label class="filter">
         Specificite
         <select v-model="filterSpecificite">
@@ -229,8 +365,17 @@ onMounted(() => {
           <span v-else>{{ product.name.slice(0, 1) }}</span>
         </div>
         <div class="info">
+          <div class="meta">
+            <span v-if="getBadge(product)" class="badge" :class="badgeClass(getBadge(product))">
+              {{ getBadge(product) }}
+            </span>
+            <span v-if="getCategoryName(product)" class="pill">
+              {{ getCategoryName(product) }}
+            </span>
+          </div>
           <h3>{{ product.name }}</h3>
           <p class="muted">Ref: {{ product.reference || '-' }}</p>
+          <p v-if="getCategoryName(product)" class="muted">Categorie: {{ getCategoryName(product) }}</p>
           <p class="price">{{ formatMoney(getDisplayPrice(product)) }}</p>
 
           <div v-if="product.specificites?.length" class="variant">
@@ -280,6 +425,14 @@ onMounted(() => {
           <div>
             <h3>{{ selected.name }}</h3>
             <p class="muted">Ref: {{ selected.reference || '-' }}</p>
+            <div class="meta">
+              <span v-if="getBadge(selected)" class="badge" :class="badgeClass(getBadge(selected))">
+                {{ getBadge(selected) }}
+              </span>
+              <span v-if="getCategoryName(selected)" class="pill">
+                {{ getCategoryName(selected) }}
+              </span>
+            </div>
           </div>
           <button type="button" class="ghost" @click="closeDetails">Fermer</button>
         </header>
@@ -383,6 +536,11 @@ onMounted(() => {
   border: 1px solid #ccc;
 }
 
+.filter input {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+}
+
 .link {
   padding: 0.4rem 0.7rem;
   border: 1px solid #ccc;
@@ -433,6 +591,40 @@ onMounted(() => {
 .info h3 {
   margin: 0;
   font-size: 1rem;
+}
+
+.meta {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.badge {
+  display: inline-flex;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.badge.hot {
+  background: #fde2e2;
+  color: #b91c1c;
+}
+
+.badge.new {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.pill {
+  display: inline-flex;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 0.7rem;
 }
 
 .muted {

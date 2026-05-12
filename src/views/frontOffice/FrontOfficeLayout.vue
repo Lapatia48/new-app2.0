@@ -9,10 +9,11 @@ const { count } = useCartStore()
     <header class="header">
       <div class="brand">
         <h1>Boutique</h1>
-        <p>Catalogue, panier, commandes</p>
+        <p>Utilisateurs, catalogue, panier</p>
       </div>
       <nav class="nav">
-        <RouterLink to="/frontoffice/catalog" class="link">Accueil</RouterLink>
+        <RouterLink to="/frontoffice/users" class="link">Accueil</RouterLink>
+        <RouterLink to="/frontoffice/catalog" class="link">Catalogue</RouterLink>
         <RouterLink to="/frontoffice/cart" class="link">Panier ({{ count }})</RouterLink>
         <RouterLink to="/frontoffice/account" class="link">Mon compte</RouterLink>
       </nav>
