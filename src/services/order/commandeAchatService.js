@@ -2,7 +2,7 @@ import { DEFAULT_LANG_ID } from '@/services/constants'
 import { createCustomer, findCustomerIdByEmail } from '@/services/entities/customersService'
 import { createAddress } from '@/services/entities/addressesService'
 import { createCart } from '@/services/entities/cartsService'
-import { createOrder } from '@/services/entities/ordersService'
+import { createOrder, updateOrder } from '@/services/entities/ordersService'
 import { createOrderDetail } from '@/services/entities/orderDetailsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
 import { findProductInfoByReference } from '@/services/entities/productsService'
@@ -10,7 +10,7 @@ import { findProductOptionValueIdByName } from '@/services/entities/productOptio
 import { findCombinationByProductAndValueId } from '@/services/entities/combinationsService'
 import { getXml } from '@/services/http/prestashopClient'
 import { toInt } from '@/services/utils/stringUtils'
-import { getText, parseXml } from '@/services/xml/xmlUtils'
+import { getText, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
 
 export async function createOrderFromCsvRow(row, config) {
   const orderItems = parseOrderItems(row.achat)
@@ -33,6 +33,7 @@ export async function createOrderFromCsvRow(row, config) {
   const cartId = await createCartForOrder(customerId, addressId, resolvedItems, config)
   const totals = computeOrderTotals(resolvedItems)
   const orderStateId = resolveOrderStateId(row.etat, config)
+  const orderDate = parseOrderDate(row.date)
 
   const orderId = await createOrder({
     id_cart: cartId,
@@ -65,6 +66,8 @@ export async function createOrderFromCsvRow(row, config) {
     secure_key: secureKey,
     conversion_rate: 1
   })
+
+  await updateOrderDate(orderId, orderDate)
 
   for (const item of resolvedItems) {
     const lineName = item.karazany ? `${item.name} (${item.karazany})` : item.name
@@ -335,4 +338,68 @@ async function findCombinationForKarazany(productId, karazany) {
     return null
   }
   return findCombinationByProductAndValueId(productId, valueId)
+}
+
+async function updateOrderDate(orderId, orderDate) {
+  if (!orderDate) {
+    return
+  }
+  const xml = await getXml(`orders/${orderId}`, { display: 'full' })
+  const data = xmlToJson(xml)
+  const order = data.order || data
+  const sanitized = stripXmlAttrs(order)
+  if (sanitized.associations) {
+    delete sanitized.associations
+  }
+  await updateOrder(orderId, { ...sanitized, date_add: orderDate, date_upd: orderDate })
+}
+
+function stripXmlAttrs(value) {
+  if (Array.isArray(value)) {
+    return value.map(stripXmlAttrs)
+  }
+  if (value && typeof value === 'object') {
+    const result = {}
+    for (const [key, val] of Object.entries(value)) {
+      if (key === '_attrs') {
+        continue
+      }
+      result[key] = stripXmlAttrs(val)
+    }
+    return result
+  }
+  return value
+}
+
+function parseOrderDate(dateStr) {
+  const raw = String(dateStr || '').trim()
+  if (!raw) {
+    return null
+  }
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]} 00:00:00`
+  }
+
+  const parts = raw.split('/')
+  if (parts.length !== 3) {
+    return null
+  }
+
+  const day = parts[0].padStart(2, '0')
+  const month = parts[1].padStart(2, '0')
+  const year = parts[2]
+
+  if (!/^\d{4}$/.test(year)) {
+    return null
+  }
+
+  const isoDate = `${year}-${month}-${day}`
+  const dateObj = new Date(`${isoDate}T00:00:00`)
+  if (Number.isNaN(dateObj.getTime())) {
+    return null
+  }
+
+  return `${isoDate} 00:00:00`
 }
