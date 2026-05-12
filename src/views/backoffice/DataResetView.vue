@@ -24,11 +24,7 @@ async function startReset() {
 
 <template>
   <div class="stack">
-    <SectionHeader
-      eyebrow="Reset"
-      title="Reinitialisation des donnees"
-      subtitle="Suppression ciblee, stock en PUT 0, et categories preservees."
-    />
+
 
     <div class="panel">
       <div class="actions">

@@ -1,7 +1,7 @@
 import { DEFAULT_CATEGORY_ID, DEFAULT_LANG_ID } from '@/services/constants'
 import { deleteXml, getXml, postXml, putXml } from '@/services/http/prestashopClient'
 import { fetchAllIds } from '@/services/entities/entityUtils'
-import { buildEntityXml, getIdFromXml, langField, xmlToJson } from '@/services/xml/xmlUtils'
+import { buildEntityXml, extractIdsByTag, getIdFromXml, langField, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
 import { slugify } from '@/services/utils/stringUtils'
 
 export function listCategoryIds() {
@@ -22,6 +22,21 @@ export async function createCategory(data, langId = DEFAULT_LANG_ID) {
     throw new Error('Missing category id in response')
   }
   return id
+}
+
+export async function findCategoryIdByName(name) {
+  if (!name) {
+    return null
+  }
+  const xml = await getXml('categories', {
+    display: '[id]',
+    'filter[name]': name
+  })
+  const doc = parseXml(xml)
+  const ids = extractIdsByTag(doc, 'category')
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
+  return ids[0] ?? null
 }
 
 export async function updateCategory(id, data, langId = DEFAULT_LANG_ID) {
