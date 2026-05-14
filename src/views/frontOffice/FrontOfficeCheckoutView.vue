@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useCartStore } from '@/services/frontoffice/cartStore'
 import { useFrontofficeSession } from '@/services/frontoffice/frontofficeSession'
 import {
   buildOrderConfig,
+  createOrderFromCartId,
   createOrderFromCsvRow,
+  loadCheckoutCart,
   validateOrderConfig
 } from '@/services/order/commandeAchatService'
 import CheckoutStepCustomer from './checkout/CheckoutStepCustomer.vue'
@@ -14,6 +16,7 @@ import CheckoutStepShipping from './checkout/CheckoutStepShipping.vue'
 import CheckoutStepPayment from './checkout/CheckoutStepPayment.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { items, total, clearCart } = useCartStore()
 const { user } = useFrontofficeSession()
 
@@ -31,10 +34,22 @@ const submitting = ref(false)
 const error = ref('')
 const success = ref(false)
 const lastOrderId = ref(null)
+const cartItems = ref([])
+const cartTotal = ref(0)
+const cartLoading = ref(false)
+const loadError = ref('')
+const checkoutCartId = ref(null)
+
+const fromCart = computed(() => Boolean(checkoutCartId.value))
+const activeItems = computed(() => (fromCart.value ? cartItems.value : items.value))
+const activeTotal = computed(() => (fromCart.value ? cartTotal.value : total.value))
 
 watch(
   () => user.value,
   (value) => {
+    if (fromCart.value) {
+      return
+    }
     if (value && !customer.value) {
       customer.value = value
       if (step.value === 1) {
@@ -46,8 +61,56 @@ watch(
 )
 
 const canSubmit = computed(() => {
-  return items.value.length > 0 && address.value.trim() && (customer.value || user.value)
+  return activeItems.value.length > 0 && address.value.trim() && (customer.value || user.value)
 })
+
+function resetCartContext() {
+  cartItems.value = []
+  cartTotal.value = 0
+  cartLoading.value = false
+  loadError.value = ''
+  address.value = ''
+  if (step.value > 1) {
+    step.value = 1
+  }
+}
+
+async function loadCartFromQuery(cartId) {
+  cartLoading.value = true
+  loadError.value = ''
+  error.value = ''
+  success.value = false
+  lastOrderId.value = null
+  try {
+    const data = await loadCheckoutCart(cartId)
+    cartItems.value = data.items || []
+    cartTotal.value = Number.isFinite(data.total) ? data.total : 0
+    address.value = data.addressText || ''
+    if (data.customer) {
+      customer.value = data.customer
+    }
+    step.value = 3
+  } catch (err) {
+    loadError.value = err?.message || 'Chargement du panier impossible.'
+  } finally {
+    cartLoading.value = false
+  }
+}
+
+watch(
+  () => route.query.cartId,
+  (value) => {
+    const parsed = Number.parseInt(String(value ?? ''), 10)
+    if (Number.isFinite(parsed) && parsed > 0) {
+      checkoutCartId.value = parsed
+      loadCartFromQuery(parsed)
+      return
+    }
+    checkoutCartId.value = null
+    resetCartContext()
+  },
+  { immediate: true }
+)
 
 function nextStep() {
   step.value = Math.min(step.value + 1, 4)
@@ -97,6 +160,13 @@ async function submitOrder() {
     const config = buildOrderConfig()
     validateOrderConfig(config)
 
+    if (fromCart.value) {
+      const orderId = await createOrderFromCartId(checkoutCartId.value, config)
+      lastOrderId.value = orderId
+      success.value = true
+      return
+    }
+
     const name =
       info.name || `${info.firstname || ''} ${info.lastname || ''}`.trim() || info.email || 'Client'
 
@@ -145,7 +215,9 @@ function goOrders() {
       </li>
     </ol>
 
-    <p v-if="!items.length" class="notice">Panier vide. Ajoutez un produit.</p>
+    <p v-if="loadError" class="notice error">{{ loadError }}</p>
+    <p v-else-if="cartLoading" class="notice">Chargement du panier...</p>
+    <p v-else-if="!activeItems.length" class="notice">Panier vide. Ajoutez un produit.</p>
 
     <div v-else class="step-panel">
       <CheckoutStepCustomer v-if="step === 1" @next="handleCustomer" />
@@ -161,8 +233,8 @@ function goOrders() {
 
       <CheckoutStepPayment
         v-else
-        :items="items"
-        :total="total"
+        :items="activeItems"
+        :total="activeTotal"
         :submitting="submitting"
         :error="error"
         :can-submit="canSubmit"
@@ -209,6 +281,12 @@ function goOrders() {
   padding: 0.6rem;
   border: 1px solid #eee;
   background: #fafafa;
+}
+
+.notice.error {
+  border-color: #f5c2c2;
+  background: #fdecec;
+  color: #a62929;
 }
 
 .steps {

@@ -1,11 +1,11 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { buildOrderConfig } from '@/services/order/commandeAchatService'
 import { createCustomer, findCustomerIdByEmail, readCustomer } from '@/services/entities/customersService'
 import { useFrontofficeSession } from '@/services/frontoffice/frontofficeSession'
 
 const emit = defineEmits(['next'])
-const { setUser } = useFrontofficeSession()
+const { user, setUser } = useFrontofficeSession()
 
 const mode = ref('login')
 const loading = ref(false)
@@ -17,6 +17,13 @@ const loginPassword = ref('')
 const registerName = ref('')
 const registerEmail = ref('')
 const registerPassword = ref('')
+
+onMounted(() => {
+  const current = user?.value
+  if (current?.id || current?.email) {
+    emit('next', current)
+  }
+})
 
 function pickText(value) {
   if (value === undefined || value === null) return ''

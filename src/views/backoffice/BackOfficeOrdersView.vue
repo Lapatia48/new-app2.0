@@ -22,7 +22,7 @@ async function loadOrders() {
 }
 
 function openDetail(entry) {
-  selected.value = { id: entry.summary.id }
+  selected.value = { id: entry.summary.id, summary: entry.summary }
   showDetail.value = true
 }
 
@@ -33,9 +33,14 @@ function closeDetail() {
 
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
+  if (normalized.includes('panier')) return 'cart'
   if (normalized.includes('accep')) return 'paid'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
+}
+
+function isCart(entry) {
+  return Boolean(entry?.summary?.isCart)
 }
 
 onMounted(() => {
@@ -86,7 +91,9 @@ onMounted(() => {
               </span>
             </td>
             <td>
-              <button type="button" class="primary" @click="openDetail(entry)">Voir / Modifier</button>
+              <button type="button" class="primary" @click="openDetail(entry)">
+                {{ isCart(entry) ? 'Voir' : 'Voir / Modifier' }}
+              </button>
             </td>
           </tr>
         </tbody>
@@ -246,6 +253,11 @@ h1 {
 .badge.pending {
   background: #fff5db;
   color: #8a5a1f;
+}
+
+.badge.cart {
+  background: #eaf1ff;
+  color: #35518f;
 }
 
 .badge.paid {

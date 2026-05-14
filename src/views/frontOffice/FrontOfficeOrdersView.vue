@@ -13,6 +13,7 @@ const selected = ref(null)
 
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
+  if (normalized.includes('panier')) return 'cart'
   if (normalized.includes('accep')) return 'paid'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
@@ -179,6 +180,11 @@ button.ghost {
 .badge.pending {
   background: #fff3cd;
   color: #7a5b1b;
+}
+
+.badge.cart {
+  background: #eaf1ff;
+  color: #35518f;
 }
 
 .badge.paid {

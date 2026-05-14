@@ -1,10 +1,14 @@
 import { getXml, buildApiUrl } from '@/services/http/prestashopClient'
 import { xmlToJson, parseXml, extractIdsByTag } from '@/services/xml/xmlUtils'
 import { listOrderIds } from '@/services/entities/ordersService'
+import { listCartIds } from '@/services/entities/cartsService'
+import { readCombination } from '@/services/entities/combinationsService'
+import { findProductInfoById } from '@/services/entities/productsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
 import { buildOrderConfig } from '@/services/order/commandeAchatService'
 
 const EMPTY_LABEL = '-'
+const CART_LABEL = 'dans le panier'
 
 function textValue(value) {
   if (value === undefined || value === null) return null
@@ -82,6 +86,60 @@ function normalizeOrderRow(row) {
     quantity,
     price: formatMoney(unitPrice),
     total: formatMoney(total),
+    imageUrl: null
+  }
+}
+
+async function fetchProductInfoByIdCached(productId, cache) {
+  if (!productId) {
+    return null
+  }
+  if (cache.has(productId)) {
+    return cache.get(productId)
+  }
+  const info = await findProductInfoById(productId)
+  cache.set(productId, info || null)
+  return info || null
+}
+
+async function fetchCombinationPriceImpact(combinationId, cache) {
+  const id = toNumber(combinationId, 0)
+  if (!id) {
+    return 0
+  }
+  if (cache.has(id)) {
+    return cache.get(id)
+  }
+  try {
+    const data = await readCombination(id)
+    const combination = data?.combination || data
+    const impact = toFloat(pickText(combination?.price, combination?.price_impact), 0)
+    cache.set(id, impact)
+    return impact
+  } catch (error) {
+    cache.set(id, 0)
+    return 0
+  }
+}
+
+function normalizeCartRow(row, productInfo, priceImpact = 0) {
+  const productId = toNumber(pickText(row.id_product, row.product_id), 0)
+  const productAttributeId = toNumber(
+    pickText(row.id_product_attribute, row.product_attribute_id),
+    0
+  )
+  const quantity = toNumber(pickText(row.quantity, row.product_quantity), 0)
+  const unitPrice = (productInfo?.price || 0) + priceImpact
+
+  return {
+    productId: productId || null,
+    productAttributeId: productAttributeId || 0,
+    imageId: 0,
+    reference: productInfo?.reference || EMPTY_LABEL,
+    name: productInfo?.name || productInfo?.reference || EMPTY_LABEL,
+    quantity,
+    price: formatMoney(unitPrice),
+    total: formatMoney(unitPrice * quantity),
     imageUrl: null
   }
 }
@@ -184,6 +242,54 @@ export async function fetchOrderRows(orderObj) {
   return dedupeOrderRows(normalized)
 }
 
+export async function fetchCartRows(cartObj) {
+  if (!cartObj) return []
+  const assoc = cartObj.associations || {}
+  const rowsNode = assoc.cart_rows?.cart_row
+  const rawRows = ensureArray(rowsNode)
+  if (!rawRows.length) return []
+
+  const productCache = new Map()
+  const combinationCache = new Map()
+  const imageCache = new Map()
+
+  const normalized = await Promise.all(
+    rawRows.map(async (row) => {
+      const productId = toNumber(pickText(row.id_product, row.product_id), 0)
+      const quantity = toNumber(pickText(row.quantity, row.product_quantity), 0)
+      if (!productId || quantity <= 0) {
+        return null
+      }
+      const productAttributeId = toNumber(
+        pickText(row.id_product_attribute, row.product_attribute_id),
+        0
+      )
+      const productInfo = await fetchProductInfoByIdCached(productId, productCache)
+      const priceImpact = await fetchCombinationPriceImpact(productAttributeId, combinationCache)
+      const mapped = normalizeCartRow(row, productInfo, priceImpact)
+      const imageUrl = await fetchFirstProductImageUrl(mapped.productId, imageCache)
+      return { ...mapped, imageUrl }
+    })
+  )
+
+  return dedupeOrderRows(normalized.filter(Boolean))
+}
+
+function computeRowsTotal(rows = []) {
+  return rows.reduce((sum, row) => sum + toFloat(row.total, 0), 0)
+}
+
+function parseDateValue(value) {
+  const raw = String(value || '').trim()
+  if (!raw || raw === EMPTY_LABEL) {
+    return 0
+  }
+  const normalized = raw.replace(' ', 'T')
+  const parsed = new Date(normalized)
+  const ts = parsed.getTime()
+  return Number.isFinite(ts) ? ts : 0
+}
+
 export async function buildGestionCommandeDto(orderId) {
   const orderData = await fetchOrderFull(orderId)
   const order = orderData.order || orderData
@@ -203,6 +309,8 @@ export async function buildGestionCommandeDto(orderId) {
   const config = buildOrderConfig()
   const currentStateId = toNumber(order.current_state, 0)
   const dateValue = pickText(order.date_add, order.invoice_date) || EMPTY_LABEL
+  const resolvedOrderId = toNumber(order.id, orderId)
+  const resolvedCartId = toNumber(order.id_cart, idCart)
 
   return {
     order,
@@ -212,19 +320,72 @@ export async function buildGestionCommandeDto(orderId) {
     addressInvoice,
     rows,
     summary: {
-      id: toNumber(order.id, orderId),
+      id: resolvedOrderId,
+      orderId: resolvedOrderId,
+      cartId: resolvedCartId || 0,
       date: dateValue,
       customerName: getCustomerDisplayName(customer),
       totalPaid: formatMoney(pickText(order.total_paid_real, order.total_paid, 0)),
       currentStateId,
-      currentStateLabel: formatStateLabel(currentStateId, config)
+      currentStateLabel: formatStateLabel(currentStateId, config),
+      isCart: false
+    }
+  }
+}
+
+export async function buildGestionPanierDto(cartId) {
+  const cartData = await fetchCartFull(cartId)
+  const cart = cartData?.cart || cartData
+  if (!cart) {
+    return null
+  }
+
+  const idCustomer = toNumber(cart.id_customer, 0)
+  if (!idCustomer) {
+    return null
+  }
+  const idAddressDelivery = toNumber(cart.id_address_delivery, 0)
+  const idAddressInvoice = toNumber(cart.id_address_invoice, 0)
+
+  const [customer, addressDelivery, addressInvoice, rows] = await Promise.all([
+    idCustomer ? fetchCustomerFull(idCustomer) : null,
+    idAddressDelivery ? fetchAddressFull(idAddressDelivery) : null,
+    idAddressInvoice ? fetchAddressFull(idAddressInvoice) : null,
+    fetchCartRows(cart)
+  ])
+
+  if (!rows.length) {
+    return null
+  }
+
+  const dateValue = pickText(cart.date_add, cart.date_upd) || EMPTY_LABEL
+  const resolvedCartId = toNumber(cart.id, cartId)
+  const totalValue = computeRowsTotal(rows)
+
+  return {
+    order: null,
+    cart,
+    customer,
+    addressDelivery,
+    addressInvoice,
+    rows,
+    summary: {
+      id: resolvedCartId,
+      orderId: null,
+      cartId: resolvedCartId,
+      date: dateValue,
+      customerName: getCustomerDisplayName(customer),
+      totalPaid: formatMoney(totalValue),
+      currentStateId: 0,
+      currentStateLabel: CART_LABEL,
+      isCart: true
     }
   }
 }
 
 export async function listGestionCommandes() {
   const ids = await listOrderIds()
-  const list = await Promise.all(
+  const orderList = await Promise.all(
     ids.map(async (id) => {
       try {
         return await buildGestionCommandeDto(id)
@@ -234,9 +395,36 @@ export async function listGestionCommandes() {
     })
   )
 
-  return list
-    .filter(Boolean)
-    .sort((a, b) => (b.summary?.id || 0) - (a.summary?.id || 0))
+  const orders = orderList.filter(Boolean)
+  const orderCartIds = new Set(
+    orders
+      .map((entry) => toNumber(entry?.order?.id_cart, entry?.summary?.cartId || 0))
+      .filter((value) => value)
+  )
+
+  const cartIds = await listCartIds()
+  const cartList = await Promise.all(
+    cartIds
+      .filter((id) => !orderCartIds.has(id))
+      .map(async (id) => {
+        try {
+          return await buildGestionPanierDto(id)
+        } catch (error) {
+          return null
+        }
+      })
+  )
+
+  const list = [...orders, ...cartList.filter(Boolean)]
+
+  return list.sort((a, b) => {
+    const dateA = parseDateValue(a.summary?.date)
+    const dateB = parseDateValue(b.summary?.date)
+    if (dateA !== dateB) {
+      return dateB - dateA
+    }
+    return (b.summary?.id || 0) - (a.summary?.id || 0)
+  })
 }
 
 export async function listGestionCommandesByCustomer(customerId) {
@@ -244,16 +432,10 @@ export async function listGestionCommandesByCustomer(customerId) {
   if (!id) {
     return []
   }
-  const xml = await getXml('orders', {
-    display: '[id]','filter[id_customer]': id
-  })
-  const doc = parseXml(xml)
-  const ids = extractIdsByTag(doc, 'order')
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isFinite(value))
+  const orderIds = await listOrderIdsByCustomer(id)
 
-  const list = await Promise.all(
-    ids.map(async (orderId) => {
+  const orderList = await Promise.all(
+    orderIds.map(async (orderId) => {
       try {
         return await buildGestionCommandeDto(orderId)
       } catch (error) {
@@ -262,9 +444,58 @@ export async function listGestionCommandesByCustomer(customerId) {
     })
   )
 
-  return list
-    .filter(Boolean)
-    .sort((a, b) => (b.summary?.id || 0) - (a.summary?.id || 0))
+  const orders = orderList.filter(Boolean)
+  const orderCartIds = new Set(
+    orders
+      .map((entry) => toNumber(entry?.order?.id_cart, entry?.summary?.cartId || 0))
+      .filter((value) => value)
+  )
+
+  const cartIds = await listCartIdsByCustomer(id)
+  const cartList = await Promise.all(
+    cartIds
+      .filter((cartId) => !orderCartIds.has(cartId))
+      .map(async (cartId) => {
+        try {
+          return await buildGestionPanierDto(cartId)
+        } catch (error) {
+          return null
+        }
+      })
+  )
+
+  const list = [...orders, ...cartList.filter(Boolean)]
+
+  return list.sort((a, b) => {
+    const dateA = parseDateValue(a.summary?.date)
+    const dateB = parseDateValue(b.summary?.date)
+    if (dateA !== dateB) {
+      return dateB - dateA
+    }
+    return (b.summary?.id || 0) - (a.summary?.id || 0)
+  })
+}
+
+async function listOrderIdsByCustomer(customerId) {
+  const xml = await getXml('orders', {
+    display: '[id]',
+    'filter[id_customer]': customerId
+  })
+  const doc = parseXml(xml)
+  return extractIdsByTag(doc, 'order')
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
+}
+
+async function listCartIdsByCustomer(customerId) {
+  const xml = await getXml('carts', {
+    display: '[id]',
+    'filter[id_customer]': customerId
+  })
+  const doc = parseXml(xml)
+  return extractIdsByTag(doc, 'cart')
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
 }
 
 export function getStateOptions() {
@@ -293,8 +524,11 @@ export default {
   fetchCartFull,
   fetchAddressFull,
   fetchOrderRows,
+  fetchCartRows,
   buildGestionCommandeDto,
+  buildGestionPanierDto,
   listGestionCommandes,
+  listGestionCommandesByCustomer,
   getStateOptions,
   changeOrderState,
   changeOrderStatePut

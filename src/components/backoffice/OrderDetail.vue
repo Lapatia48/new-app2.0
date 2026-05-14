@@ -18,7 +18,9 @@ const error = ref('')
 const states = ref(getStateOptions())
 const selectedState = ref(null)
 
-const summary = computed(() => dto.value?.summary || {})
+const summary = computed(() => dto.value?.summary || props.entry?.summary || {})
+const isCart = computed(() => summary.value?.isCart)
+const notOrdered = ref(false)
 
 watch(
   () => props.entry?.id,
@@ -36,15 +38,31 @@ watch(
 
 async function loadDetails() {
   if (!props.entry || !props.entry.id) return
+  if (props.entry?.summary?.isCart) {
+    dto.value = { summary: props.entry.summary }
+    details.value = []
+    selectedState.value = null
+    return
+  }
   loading.value = true
   error.value = ''
+  notOrdered.value = false
   try {
     dto.value = await buildGestionCommandeDto(props.entry.id)
     const rows = dto.value.rows || []
     details.value = await enrichRowsWithProductImages(rows)
     selectedState.value = dto.value?.summary?.currentStateId || null
   } catch (err) {
-    error.value = err?.message || 'Erreur lors du chargement de la commande.'
+    const status = err?.status || err?.response?.status
+    if (status === 404) {
+      notOrdered.value = true
+      error.value = ''
+      dto.value = { summary: props.entry?.summary || {} }
+      details.value = []
+      selectedState.value = null
+    } else {
+      error.value = err?.message || 'Erreur lors du chargement de la commande.'
+    }
   } finally {
     loading.value = false
   }
@@ -86,6 +104,7 @@ function formatAddress(address) {
 
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
+  if (normalized.includes('panier')) return 'cart'
   if (normalized.includes('accep')) return 'paid'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
@@ -121,8 +140,9 @@ function close() {
             <span class="badge" :class="stateClass(summary.currentStateLabel)">
               {{ summary.currentStateLabel || '-' }}
             </span>
+            <p v-if="isCart" class="hint">Panier en attente de validation.</p>
           </div>
-          <div class="state-form">
+          <div v-if="!isCart" class="state-form">
             <label class="label">Modifier</label>
             <div class="state-controls">
               <select v-model="selectedState">
@@ -161,7 +181,8 @@ function close() {
             <p class="muted">{{ details.length }} article(s)</p>
           </div>
 
-          <div v-if="!details.length" class="empty">Aucun article associe a la commande.</div>
+          <div v-if="isCart || notOrdered" class="empty">Pas encore commandee.</div>
+          <div v-else-if="!details.length" class="empty">Aucun article associe a la commande.</div>
           <div v-else class="items-grid">
             <article v-for="it in details" :key="`${it.productId}-${it.productAttributeId || 0}-${it.reference}`" class="item">
               <div class="thumb">
@@ -327,6 +348,17 @@ select {
 .badge.pending {
   background: #fff5db;
   color: #8a5a1f;
+}
+
+.badge.cart {
+  background: #eaf1ff;
+  color: #35518f;
+}
+
+.hint {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .badge.paid {

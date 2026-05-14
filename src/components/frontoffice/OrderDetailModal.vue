@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { enrichRowsWithProductImages } from '@/services/entities/imagesService'
 import { enrichOrderRowsWithVariants } from '@/services/frontoffice/productVariantsService'
 
@@ -11,12 +12,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+const router = useRouter()
 
 const rows = ref([])
 const loading = ref(false)
 const error = ref('')
 
 const summary = computed(() => props.entry?.summary || {})
+const isCart = computed(() => summary.value?.isCart)
 
 watch(
   () => props.entry?.summary?.id,
@@ -60,9 +63,19 @@ function formatAddress(address) {
 
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
+  if (normalized.includes('panier')) return 'cart'
   if (normalized.includes('accep')) return 'paid'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
+}
+
+function finalizeCart() {
+  const cartId = summary.value?.cartId || summary.value?.id
+  if (!cartId) {
+    return
+  }
+  close()
+  router.push({ name: 'frontoffice-checkout', query: { cartId } })
 }
 
 function close() {
@@ -82,10 +95,15 @@ function close() {
       </header>
 
       <div class="state-card">
-        <p class="label">Etat de paiement</p>
-        <span class="badge" :class="stateClass(summary.currentStateLabel)">
-          {{ summary.currentStateLabel }}
-        </span>
+        <div class="state-info">
+          <p class="label">Etat de paiement</p>
+          <span class="badge" :class="stateClass(summary.currentStateLabel)">
+            {{ summary.currentStateLabel }}
+          </span>
+        </div>
+        <button v-if="isCart" type="button" class="primary" @click="finalizeCart">
+          Finaliser achat
+        </button>
       </div>
 
       <div class="detail-grid">
@@ -174,11 +192,18 @@ function close() {
 .state-card {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
+  flex-wrap: wrap;
   border: 1px solid #eee;
   padding: 0.6rem;
   background: #fafafa;
   margin-bottom: 1rem;
+}
+
+.state-info {
+  display: grid;
+  gap: 0.25rem;
 }
 
 .detail-grid {
@@ -280,6 +305,11 @@ function close() {
   color: #7a5b1b;
 }
 
+.badge.cart {
+  background: #eaf1ff;
+  color: #35518f;
+}
+
 .badge.paid {
   background: #d4edda;
   color: #1f6b2f;
@@ -288,6 +318,14 @@ function close() {
 .badge.error {
   background: #f8d7da;
   color: #8a2730;
+}
+
+.primary {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
 }
 
 @media (max-width: 720px) {
