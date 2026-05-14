@@ -12,7 +12,12 @@ import { uploadProductImage } from '@/services/entities/imagesService'
 import { createProductOption, findProductOptionIdByName } from '@/services/entities/productOptionsService'
 import { createProductOptionValue, findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
 import { createCombinationForProduct, findCombinationByProductAndValueId } from '@/services/entities/combinationsService'
-import { buildOrderConfig, createOrderFromCsvRow, validateOrderConfig } from '@/services/order/commandeAchatService'
+import {
+  buildOrderConfig,
+  createCartFromCsvRow,
+  createOrderFromCsvRow,
+  validateOrderConfig
+} from '@/services/order/commandeAchatService'
 import { slugify, toFloat, toInt } from '@/services/utils/stringUtils'
 
 export async function runImport({ target, rows = [], files = [] }) {
@@ -213,7 +218,12 @@ async function importOrders(rows) {
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index]
     try {
-      await createOrderFromCsvRow(row, config)
+      const status = String(row.etat || '').trim()
+      if (!status) {
+        await createCartFromCsvRow(row, config)
+      } else {
+        await createOrderFromCsvRow(row, config)
+      }
       success += 1
     } catch (error) {
       console.log(`Row ${index + 1}: ${error.message}`)

@@ -1,15 +1,15 @@
 import { DEFAULT_LANG_ID } from '@/services/constants'
-import { createCustomer, findCustomerIdByEmail } from '@/services/entities/customersService'
-import { createAddress } from '@/services/entities/addressesService'
-import { createCart } from '@/services/entities/cartsService'
+import { createCustomer, findCustomerIdByEmail, readCustomer } from '@/services/entities/customersService'
+import { createAddress, readAddress } from '@/services/entities/addressesService'
+import { createCart, readCart } from '@/services/entities/cartsService'
 import { createOrder, updateOrder } from '@/services/entities/ordersService'
 import { createOrderDetail } from '@/services/entities/orderDetailsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
-import { findProductInfoByReference } from '@/services/entities/productsService'
+import { findProductInfoById, findProductInfoByReference } from '@/services/entities/productsService'
 import { findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
-import { findCombinationByProductAndValueId } from '@/services/entities/combinationsService'
+import { findCombinationByProductAndValueId, readCombination } from '@/services/entities/combinationsService'
 import { getXml } from '@/services/http/prestashopClient'
-import { toInt } from '@/services/utils/stringUtils'
+import { toFloat, toInt } from '@/services/utils/stringUtils'
 import { getText, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
 
 export async function createOrderFromCsvRow(row, config) {
@@ -98,6 +98,158 @@ export async function createOrderFromCsvRow(row, config) {
   }
 
   return orderId
+}
+
+export async function createCartFromCsvRow(row, config) {
+  const orderItems = parseOrderItems(row.achat)
+  if (!orderItems.length) {
+    throw new Error('Empty achat')
+  }
+
+  const customerId = await ensureCustomer(row, config)
+  const addressId = await createAddressForCustomer(customerId, row, config)
+  const resolvedItems = await resolveOrderItems(orderItems)
+
+  if (!resolvedItems.length) {
+    throw new Error('No valid products')
+  }
+
+  return createCartForOrder(customerId, addressId, resolvedItems, config)
+}
+
+export async function createOrderFromCartId(cartId, config) {
+  const cartData = await readCart(cartId)
+  const cart = extractEntity(cartData, 'cart')
+  if (!cart) {
+    throw new Error('Panier introuvable')
+  }
+
+  const customerId = toInt(pickText(cart.id_customer), 0)
+  if (!customerId) {
+    throw new Error('Client manquant pour le panier')
+  }
+
+  const secureKey = await fetchCustomerSecureKey(customerId)
+  if (!secureKey) {
+    throw new Error('Missing secure_key for customer')
+  }
+
+  const addressDeliveryId = toInt(
+    pickText(cart.id_address_delivery, cart.id_address_invoice),
+    0
+  )
+  if (!addressDeliveryId) {
+    throw new Error('Adresse manquante pour le panier')
+  }
+  const addressInvoiceId =
+    toInt(pickText(cart.id_address_invoice), 0) || addressDeliveryId
+
+  const items = await resolveCartItems(cart)
+  if (!items.length) {
+    throw new Error('Panier vide')
+  }
+
+  const totals = computeOrderTotals(items)
+  const orderStateId = config.orderStatePendingId
+
+  const orderId = await createOrder({
+    id_cart: cartId,
+    id_currency: config.currencyId,
+    id_lang: config.langId,
+    id_customer: customerId,
+    id_address_delivery: addressDeliveryId,
+    id_address_invoice: addressInvoiceId,
+    id_carrier: config.carrierId,
+    id_shop: config.shopId,
+    id_shop_group: config.shopGroupId,
+    current_state: orderStateId,
+    payment: 'Paiement a la livraison',
+    module: config.cashModule,
+    total_paid: totals.totalPaid,
+    total_paid_real: totals.totalPaid,
+    total_paid_tax_incl: totals.totalPaid,
+    total_paid_tax_excl: totals.totalPaid,
+    total_products: totals.totalProducts,
+    total_products_wt: totals.totalProducts,
+    total_discounts: totals.totalDiscounts,
+    total_discounts_tax_incl: totals.totalDiscounts,
+    total_discounts_tax_excl: totals.totalDiscounts,
+    total_shipping: totals.totalShipping,
+    total_shipping_tax_incl: totals.totalShipping,
+    total_shipping_tax_excl: totals.totalShipping,
+    total_wrapping: totals.totalWrapping,
+    total_wrapping_tax_incl: totals.totalWrapping,
+    total_wrapping_tax_excl: totals.totalWrapping,
+    secure_key: secureKey,
+    conversion_rate: 1
+  })
+
+  for (const item of items) {
+    const lineName = item.karazany ? `${item.name} (${item.karazany})` : item.name
+    const unitPrice = formatMoney(item.price)
+    const lineTotal = formatMoney(item.price * item.quantity)
+    await createOrderDetail({
+      id_order: orderId,
+      product_id: item.id,
+      product_attribute_id: item.productAttributeId || 0,
+      product_name: lineName,
+      product_reference: item.reference,
+      product_quantity: item.quantity,
+      product_price: unitPrice,
+      unit_price_tax_incl: unitPrice,
+      unit_price_tax_excl: unitPrice,
+      total_price_tax_incl: lineTotal,
+      total_price_tax_excl: lineTotal,
+      id_warehouse: config.warehouseId,
+      id_shop: config.shopId
+    })
+  }
+
+  if (orderStateId) {
+    await createOrderHistory({
+      id_order: orderId,
+      id_order_state: orderStateId
+    })
+  }
+
+  return orderId
+}
+
+export async function loadCheckoutCart(cartId) {
+  const cartData = await readCart(cartId)
+  const cart = extractEntity(cartData, 'cart')
+  if (!cart) {
+    throw new Error('Panier introuvable')
+  }
+
+  const customerId = toInt(pickText(cart.id_customer), 0)
+  const addressDeliveryId = toInt(
+    pickText(cart.id_address_delivery, cart.id_address_invoice),
+    0
+  )
+  const addressInvoiceId =
+    toInt(pickText(cart.id_address_invoice), 0) || addressDeliveryId
+
+  const [customerData, addressDelivery, addressInvoice, items] = await Promise.all([
+    customerId ? readCustomer(customerId) : null,
+    addressDeliveryId ? readAddress(addressDeliveryId) : null,
+    addressInvoiceId ? readAddress(addressInvoiceId) : null,
+    resolveCartItems(cart)
+  ])
+
+  const totals = computeOrderTotals(items)
+  const customer = extractEntity(customerData, 'customer')
+  const address = extractEntity(addressDelivery, 'address')
+
+  return {
+    cart,
+    customer: normalizeCustomer(customer),
+    addressDelivery: extractEntity(addressDelivery, 'address'),
+    addressInvoice: extractEntity(addressInvoice, 'address'),
+    addressText: formatAddress(address),
+    items,
+    total: Number.parseFloat(totals.totalPaid)
+  }
 }
 
 export function buildOrderConfig() {
@@ -302,6 +454,142 @@ function formatMoney(value) {
     return '0.00'
   }
   return numeric.toFixed(2)
+}
+
+function textValue(value) {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'object' && value._text !== undefined && value._text !== null) {
+    return String(value._text)
+  }
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return null
+}
+
+function pickText(...values) {
+  for (const value of values) {
+    const text = textValue(value)
+    if (text !== null && text !== '') {
+      return text
+    }
+  }
+  return null
+}
+
+function ensureArray(value) {
+  if (value === undefined || value === null) return []
+  return Array.isArray(value) ? value : [value]
+}
+
+function extractEntity(data, key) {
+  if (!data) {
+    return null
+  }
+  if (typeof data === 'object' && data[key]) {
+    return data[key]
+  }
+  return data
+}
+
+function normalizeCustomer(customer) {
+  if (!customer) {
+    return null
+  }
+  const id = toInt(pickText(customer.id), 0)
+  const firstname = pickText(customer.firstname) || ''
+  const lastname = pickText(customer.lastname) || ''
+  const email = pickText(customer.email) || ''
+  const name = `${firstname} ${lastname}`.trim() || email
+  if (!id && !email) {
+    return null
+  }
+  return { id, firstname, lastname, email, name }
+}
+
+function formatAddress(address) {
+  if (!address) {
+    return ''
+  }
+  const address1 = pickText(address.address1) || ''
+  const city = pickText(address.city) || ''
+  const postcode = pickText(address.postcode) || ''
+  return [address1, postcode, city].filter(Boolean).join(' ').trim()
+}
+
+async function resolveCartItems(cart) {
+  const rowsNode = cart?.associations?.cart_rows?.cart_row
+  const rawRows = ensureArray(rowsNode)
+  if (!rawRows.length) {
+    return []
+  }
+
+  const productCache = new Map()
+  const combinationCache = new Map()
+  const items = []
+
+  for (const row of rawRows) {
+    const productId = toInt(pickText(row.id_product, row.product_id), 0)
+    const productAttributeId = toInt(
+      pickText(row.id_product_attribute, row.product_attribute_id),
+      0
+    )
+    const quantity = toInt(pickText(row.quantity, row.product_quantity), 0)
+
+    if (!productId || !quantity) {
+      continue
+    }
+
+    const productInfo = await getProductInfoById(productId, productCache)
+    if (!productInfo) {
+      continue
+    }
+
+    const priceImpact = await getCombinationPriceImpact(productAttributeId, combinationCache)
+    const price = (productInfo.price || 0) + priceImpact
+
+    items.push({
+      id: productInfo.id,
+      name: productInfo.name || productInfo.reference || String(productInfo.id),
+      reference: productInfo.reference || String(productInfo.id),
+      price,
+      quantity,
+      karazany: '',
+      productAttributeId: productAttributeId || 0
+    })
+  }
+
+  return items
+}
+
+async function getProductInfoById(productId, cache) {
+  if (cache.has(productId)) {
+    return cache.get(productId)
+  }
+  const info = await findProductInfoById(productId)
+  if (info) {
+    cache.set(productId, info)
+  }
+  return info
+}
+
+async function getCombinationPriceImpact(combinationId, cache) {
+  const id = toInt(combinationId, 0)
+  if (!id) {
+    return 0
+  }
+  if (cache.has(id)) {
+    return cache.get(id)
+  }
+  try {
+    const data = await readCombination(id)
+    const combination = extractEntity(data, 'combination')
+    const impact = toFloat(pickText(combination?.price, combination?.price_impact), 0)
+    cache.set(id, impact)
+    return impact
+  } catch (error) {
+    cache.set(id, 0)
+    return 0
+  }
 }
 
 function resolveOrderStateId(status, config) {

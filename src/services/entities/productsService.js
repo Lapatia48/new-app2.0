@@ -65,6 +65,35 @@ export async function findProductInfoByReference(reference) {
   }
 }
 
+export async function findProductInfoById(productId) {
+  const id = Number.parseInt(String(productId ?? ''), 10)
+  if (!Number.isFinite(id) || !id) {
+    return null
+  }
+  const xml = await getXml('products', {
+    display: '[id,reference,price,name]',
+    'filter[id]': id
+  })
+  const doc = parseXml(xml)
+  const node = doc.querySelector('product')
+  if (!node) {
+    return null
+  }
+  const resolvedId = Number.parseInt(node.getAttribute('id') || getText(node, 'id'), 10)
+  if (!Number.isFinite(resolvedId)) {
+    return null
+  }
+  const name = getText(node, 'name')
+  const reference = getText(node, 'reference')
+  const price = Number.parseFloat(getText(node, 'price') || '0')
+  return {
+    id: resolvedId,
+    name,
+    reference,
+    price: Number.isFinite(price) ? price : 0
+  }
+}
+
 export async function updateProduct(id, data, langId = DEFAULT_LANG_ID) {
   const payload = buildProductPayload({ ...data, id }, langId)
   const xml = buildEntityXml('product', payload)
