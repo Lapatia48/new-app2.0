@@ -110,6 +110,42 @@ export async function setQuantityForProductAttribute(productId, productAttribute
   await setStockQuantityById(stockId, quantity)
 }
 
+function getQuantityFromDoc(doc) {
+  const node = doc.querySelector('stock_available')
+  if (!node) {
+    return null
+  }
+  const raw = getText(node, 'quantity')
+  const parsed = Number.parseInt(String(raw ?? ''), 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export async function getStockQuantityByProduct(productId) {
+  if (!productId) {
+    return null
+  }
+  const xml = await getXml('stock_availables', {
+    display: '[quantity]',
+    'filter[id_product]': productId,
+    'filter[id_product_attribute]': 0
+  })
+  const doc = parseXml(xml)
+  return getQuantityFromDoc(doc)
+}
+
+export async function getStockQuantityByProductAndAttribute(productId, productAttributeId) {
+  if (!productId || !productAttributeId) {
+    return null
+  }
+  const xml = await getXml('stock_availables', {
+    display: '[quantity]',
+    'filter[id_product]': productId,
+    'filter[id_product_attribute]': productAttributeId
+  })
+  const doc = parseXml(xml)
+  return getQuantityFromDoc(doc)
+}
+
 function getText(node, selector, fallback = '') {
   const el = node.querySelector(selector)
   return el && el.textContent ? el.textContent.trim() : fallback

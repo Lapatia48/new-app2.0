@@ -3,6 +3,10 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { getXml } from '@/services/http/prestashopClient'
 import { parseXml, getText } from '@/services/xml/xmlUtils'
 import { afficherImageProduct } from '@/services/entities/imagesService'
+import {
+  getStockQuantityByProduct,
+  getStockQuantityByProductAndAttribute
+} from '@/services/entities/stockAvailablesService'
 import { useCartStore } from '@/services/frontoffice/cartStore'
 import { listProductVariants, buildSpecificiteOptions } from '@/services/frontoffice/productVariantsService'
 
@@ -13,6 +17,9 @@ const categoriesLoading = ref(false)
 const error = ref('')
 const notice = ref('')
 const selected = ref(null)
+const detailStock = ref(null)
+const detailStockLoading = ref(false)
+const detailStockError = ref('')
 const filterSpecificite = ref('')
 const filterName = ref('')
 const filterCategory = ref('')
@@ -20,6 +27,8 @@ const filterPriceMin = ref('')
 const filterPriceMax = ref('')
 
 const { addItem } = useCartStore()
+const stockCache = new Map()
+const totalStockCache = new Map()
 
 function pickLangText(node, selector) {
   return getText(node, `${selector} > language`) || getText(node, selector)
@@ -99,6 +108,50 @@ function getSelectedValue(product, group = getSelectedGroup(product)) {
 function getDisplayPrice(product) {
   const selectedValue = getSelectedValue(product)
   return product.price + (selectedValue?.priceImpact || 0)
+}
+
+function getSelectedCombinationId(product) {
+  const value = getSelectedValue(product)
+  return value?.combinationId || 0
+}
+
+async function fetchStockForSelection(product) {
+  if (!product?.id) {
+    return null
+  }
+  const combinationId = getSelectedCombinationId(product)
+  const key = `${product.id}:${combinationId || 0}`
+  if (stockCache.has(key)) {
+    return stockCache.get(key)
+  }
+  try {
+    const quantity = combinationId
+      ? await getStockQuantityByProductAndAttribute(product.id, combinationId)
+      : await getStockQuantityByProduct(product.id)
+    stockCache.set(key, quantity)
+    return quantity
+  } catch (err) {
+    stockCache.set(key, null)
+    return null
+  }
+}
+
+async function fetchTotalVariantStock(productId, variants = []) {
+  if (!productId || !variants.length) {
+    return null
+  }
+  if (totalStockCache.has(productId)) {
+    return totalStockCache.get(productId)
+  }
+  const quantities = await Promise.all(
+    variants.map(async (variant) => {
+      const qty = await getStockQuantityByProductAndAttribute(productId, variant.id)
+      return Number.isFinite(qty) ? qty : 0
+    })
+  )
+  const total = quantities.reduce((sum, value) => sum + value, 0)
+  totalStockCache.set(productId, total)
+  return total
 }
 
 function handleGroupChange(product, groupId) {
@@ -216,6 +269,7 @@ async function loadProducts() {
         const imageUrl = await afficherImageProduct(item.id)
         const variants = await listProductVariants(item.id)
         const specificites = buildSpecificiteOptions(variants)
+        const totalVariantStock = await fetchTotalVariantStock(item.id, variants)
         const defaultGroup = specificites[0] || null
         const defaultValue = defaultGroup?.values?.[0] || null
         return {
@@ -223,6 +277,7 @@ async function loadProducts() {
           imageUrl,
           variants,
           specificites,
+          totalVariantStock,
           selectedGroupId: defaultGroup?.id ?? null,
           selectedValueId: defaultValue?.id ?? null
         }
@@ -302,6 +357,29 @@ function closeDetails() {
   selected.value = null
 }
 
+watch(
+  () => [selected.value?.id, selected.value?.selectedGroupId, selected.value?.selectedValueId],
+  async () => {
+    if (!selected.value?.id) {
+      detailStock.value = null
+      detailStockLoading.value = false
+      detailStockError.value = ''
+      return
+    }
+    detailStockLoading.value = true
+    detailStockError.value = ''
+    try {
+      detailStock.value = await fetchStockForSelection(selected.value)
+    } catch (err) {
+      detailStock.value = null
+      detailStockError.value = err?.message || 'Erreur chargement stock.'
+    } finally {
+      detailStockLoading.value = false
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   loadProducts()
   loadCategories()
@@ -377,6 +455,9 @@ onMounted(() => {
           <p class="muted">Ref: {{ product.reference || '-' }}</p>
           <p v-if="getCategoryName(product)" class="muted">Categorie: {{ getCategoryName(product) }}</p>
           <p class="price">{{ formatMoney(getDisplayPrice(product)) }}</p>
+          <p v-if="product.specificites?.length" class="muted">
+            Stock restant total: {{ product.totalVariantStock ?? '-' }}
+          </p>
 
           <div v-if="product.specificites?.length" class="variant">
             <label>
@@ -445,6 +526,15 @@ onMounted(() => {
           <div class="detail-info">
             <p>{{ selected.description || 'Description non disponible.' }}</p>
             <p class="price">Prix: {{ formatMoney(getDisplayPrice(selected)) }}</p>
+            <p class="muted">
+              Stock restant:
+              <span v-if="detailStockLoading">...</span>
+              <span v-else-if="detailStockError">-</span>
+              <span v-else>{{ detailStock ?? '-' }}</span>
+            </p>
+            <p v-if="selected.specificites?.length" class="muted">
+              Stock restant total: {{ selected.totalVariantStock ?? '-' }}
+            </p>
 
             <div v-if="selected.specificites?.length" class="variant">
               <label>
