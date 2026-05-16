@@ -20,13 +20,165 @@ import {
 } from '@/services/order/commandeAchatService'
 import { slugify, toFloat, toInt } from '@/services/utils/stringUtils'
 
-export async function runImport({ target, rows = [], files = [] }) {
+const IMPORT_SCHEMA = {
+  products: {
+    required: ['nom', 'reference'],
+    allowed: [
+      'nom',
+      'reference',
+      'categorie',
+      'date_availability_produit',
+      'date_produit',
+      'prix_ttc',
+      'prix_achat'
+    ],
+    dateFields: ['date_availability_produit', 'date_produit'],
+    nonNegativeFields: ['prix_ttc', 'prix_achat']
+  },
+  stocks: {
+    required: ['reference', 'stock_initial'],
+    allowed: [
+      'reference',
+      'stock_initial',
+      'specificite',
+      'specificit',
+      'specificite_',
+      'karazany',
+      'prix_vente_ttc'
+    ],
+    dateFields: [],
+    nonNegativeFields: ['stock_initial', 'prix_vente_ttc']
+  },
+  orders: {
+    required: ['achat', 'email'],
+    allowed: ['nom', 'email', 'pwd', 'adresse', 'achat', 'etat', 'date'],
+    dateFields: ['date'],
+    nonNegativeFields: []
+  }
+}
+
+function throwResetDataError(message) {
+  throw new Error(`reset-data: ${message}`)
+}
+
+function validateImportPayload(target, rows, meta) {
+  if (!target || !IMPORT_SCHEMA[target]) {
+    return
+  }
+  validateImportHeaders(target, meta)
+  validateImportRows(target, rows)
+}
+
+function validateImportHeaders(target, meta) {
+  const normalizedHeaders = Array.isArray(meta?.normalizedHeaders) ? meta.normalizedHeaders : []
+  if (!normalizedHeaders.length) {
+    return
+  }
+
+  const schema = IMPORT_SCHEMA[target]
+  const allowed = schema.allowed || []
+  const required = schema.required || []
+  const invalid = normalizedHeaders.filter((header) => !allowed.includes(header))
+  const missing = required.filter((header) => !normalizedHeaders.includes(header))
+
+  if (invalid.length) {
+    throwResetDataError(`Nom de colonne non conforme: ${invalid.join(', ')}`)
+  }
+  if (missing.length) {
+    throwResetDataError(`Nom de colonne non conforme: colonnes manquantes ${missing.join(', ')}`)
+  }
+}
+
+function validateImportRows(target, rows) {
+  const schema = IMPORT_SCHEMA[target]
+  if (!schema || !Array.isArray(rows)) {
+    return
+  }
+
+  const dateFields = schema.dateFields || []
+  const nonNegativeFields = schema.nonNegativeFields || []
+
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2
+
+    dateFields.forEach((field) => {
+      const value = row?.[field]
+      if (!value) {
+        return
+      }
+      if (!isValidFrenchDate(String(value))) {
+        throwResetDataError(
+          `Format de date differente de DD/MM/YYYY (colonne ${field}, ligne ${rowNumber})`
+        )
+      }
+    })
+
+    nonNegativeFields.forEach((field) => {
+      const value = row?.[field]
+      if (value === undefined || value === null || String(value).trim() === '') {
+        return
+      }
+      const numeric = toFloat(String(value), Number.NaN)
+      if (Number.isFinite(numeric) && numeric < 0) {
+        throwResetDataError(
+          `Montant negatif detecte (colonne ${field}, ligne ${rowNumber})`
+        )
+      }
+    })
+
+    if (target === 'orders') {
+      validateAchatQuantities(row?.achat, rowNumber)
+    }
+  })
+}
+
+function isValidFrenchDate(value) {
+  const raw = String(value || '').trim()
+  if (!raw) {
+    return false
+  }
+  const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!match) {
+    return false
+  }
+  const day = Number(match[1])
+  const month = Number(match[2])
+  const year = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
+}
+
+function validateAchatQuantities(raw, rowNumber) {
+  const text = String(raw || '').trim()
+  if (!text) {
+    return
+  }
+  const pattern = /\(\s*"[^"]*"\s*;\s*([-+]?\d+)\s*;\s*"[^"]*"\s*\)/g
+  let match = pattern.exec(text)
+  while (match) {
+    const quantity = Number(match[1])
+    if (Number.isFinite(quantity) && quantity < 0) {
+      throwResetDataError(
+        `Montant negatif detecte (colonne achat, ligne ${rowNumber})`
+      )
+    }
+    match = pattern.exec(text)
+  }
+}
+
+export async function runImport({ target, rows = [], files = [], meta = {} }) {
   if (target === 'images') {
     return importImages(files)
   }
   if (!Array.isArray(rows)) {
     throw new Error('CSV rows are missing')
   }
+
+  validateImportPayload(target, rows, meta)
 
   if (target === 'products') {
     return importProducts(rows)
