@@ -12,6 +12,9 @@ import { uploadProductImage } from '@/services/entities/imagesService'
 import { createProductOption, findProductOptionIdByName } from '@/services/entities/productOptionsService'
 import { createProductOptionValue, findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
 import { createCombinationForProduct, findCombinationByProductAndValueId } from '@/services/entities/combinationsService'
+import { createTax, findTaxIdByName, findTaxIdByRate } from '@/services/entities/taxesService'
+import { createTaxRulesGroup, findTaxRulesGroupIdByName } from '@/services/entities/taxRulesGroupsService'
+import { createTaxRule, findTaxRuleIdByGroupAndTax } from '@/services/entities/taxRulesService'
 import {
   buildOrderConfig,
   createCartFromCsvRow,
@@ -30,10 +33,12 @@ const IMPORT_SCHEMA = {
       'date_availability_produit',
       'date_produit',
       'prix_ttc',
-      'prix_achat'
+      'prix_achat',
+      'taxe',
+      'tax'
     ],
     dateFields: ['date_availability_produit', 'date_produit'],
-    nonNegativeFields: ['prix_ttc', 'prix_achat']
+    nonNegativeFields: ['prix_ttc', 'prix_achat', 'taxe', 'tax']
   },
   stocks: {
     required: ['reference', 'stock_initial'],
@@ -129,6 +134,18 @@ function validateImportRows(target, rows) {
     if (target === 'orders') {
       validateAchatQuantities(row?.achat, rowNumber)
     }
+
+    if (target === 'products') {
+      const taxValue = row?.taxe ?? row?.tax
+      if (String(taxValue ?? '').trim()) {
+        const rate = parseTaxRate(taxValue)
+        if (rate === null) {
+          throwResetDataError(
+            `Format taxe invalide (colonne taxe, ligne ${rowNumber})`
+          )
+        }
+      }
+    }
   })
 }
 
@@ -195,6 +212,12 @@ export async function runImport({ target, rows = [], files = [], meta = {} }) {
 
 async function importProducts(rows) {
   let success = 0
+  const taxContext = {
+    taxCache: new Map(),
+    groupCache: new Map(),
+    ruleCache: new Set(),
+    config: buildTaxConfig()
+  }
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index]
@@ -209,6 +232,10 @@ async function importProducts(rows) {
     const categoryName = row.categorie?.trim()
     const categoryId = await ensureCategoryId(categoryName)
     const availableDate = toIsoDate(row.date_availability_produit || row.date_produit)
+    const taxRate = parseTaxRate(row.taxe ?? row.tax)
+    const taxRulesGroupId = taxRate === null
+      ? 0
+      : await ensureTaxRulesGroupId(taxRate, taxContext)
 
     const input = {
       name,
@@ -217,7 +244,8 @@ async function importProducts(rows) {
       wholesalePrice: toFloat(row.prix_achat || '0', 0),
       categoryId,
       availableDate,
-      linkRewrite: slugify(name)
+      linkRewrite: slugify(name),
+      taxRulesGroupId
     }
 
     try {
@@ -389,6 +417,92 @@ async function importOrders(rows) {
   }
 }
 
+function buildTaxConfig() {
+  return {
+    langId: toInt(import.meta.env.VITE_DEFAULT_LANG_ID || DEFAULT_LANG_ID, DEFAULT_LANG_ID),
+    countryId: toInt(import.meta.env.VITE_DEFAULT_COUNTRY_ID || '0', 0),
+    stateId: toInt(import.meta.env.VITE_DEFAULT_STATE_ID || '0', 0)
+  }
+}
+
+function validateTaxConfig(config) {
+  if (!config.countryId) {
+    throw new Error('Missing VITE_DEFAULT_COUNTRY_ID')
+  }
+}
+
+async function ensureTaxRulesGroupId(rate, context) {
+  const normalizedRate = normalizeTaxRate(rate)
+  if (!normalizedRate) {
+    return 0
+  }
+  if (context.groupCache.has(normalizedRate)) {
+    return context.groupCache.get(normalizedRate)
+  }
+
+  validateTaxConfig(context.config)
+
+  const taxId = await ensureTaxId(rate, context)
+  const groupName = buildTaxName(normalizedRate)
+
+  let groupId = await findTaxRulesGroupIdByName(groupName)
+  if (!groupId) {
+    groupId = await createTaxRulesGroup({ name: groupName, active: 1 })
+  }
+
+  const ruleKey = `${groupId}:${taxId}:${context.config.countryId}:${context.config.stateId || 0}`
+  if (!context.ruleCache.has(ruleKey)) {
+    const existingRuleId = await findTaxRuleIdByGroupAndTax({
+      taxRulesGroupId: groupId,
+      taxId,
+      countryId: context.config.countryId,
+      stateId: context.config.stateId
+    })
+
+    if (!existingRuleId) {
+      await createTaxRule({
+        taxRulesGroupId: groupId,
+        taxId,
+        countryId: context.config.countryId,
+        stateId: context.config.stateId,
+        behavior: 0,
+        description: `Auto import ${normalizedRate}%`
+      })
+    }
+
+    context.ruleCache.add(ruleKey)
+  }
+
+  context.groupCache.set(normalizedRate, groupId)
+  return groupId
+}
+
+async function ensureTaxId(rate, context) {
+  const normalizedRate = normalizeTaxRate(rate)
+  if (!normalizedRate) {
+    throw new Error('Missing tax rate')
+  }
+  if (context.taxCache.has(normalizedRate)) {
+    return context.taxCache.get(normalizedRate)
+  }
+
+  const name = buildTaxName(normalizedRate)
+  let taxId = await findTaxIdByRate(normalizedRate)
+  if (!taxId) {
+    taxId = await findTaxIdByName(name)
+  }
+  if (!taxId) {
+    taxId = await createTax({ name, rate: normalizedRate, active: 1 }, context.config.langId)
+  }
+
+  context.taxCache.set(normalizedRate, taxId)
+  return taxId
+}
+
+function buildTaxName(rate) {
+  return `TVA ${rate}%`
+}
+
 async function ensureCategoryId(name) {
   if (!name) {
     return DEFAULT_CATEGORY_ID
@@ -501,6 +615,30 @@ async function getProductInfoByReference(reference, cache) {
 function getSpecificite(row) {
   const raw = row.specificite || row.specificit || row.specificite_ || ''
   return String(raw || '').trim()
+}
+
+function parseTaxRate(raw) {
+  if (raw === undefined || raw === null) {
+    return null
+  }
+  const text = String(raw).trim()
+  if (!text) {
+    return null
+  }
+  const cleaned = text.replace('%', '').trim()
+  const numeric = toFloat(cleaned, Number.NaN)
+  if (!Number.isFinite(numeric)) {
+    return null
+  }
+  return numeric
+}
+
+function normalizeTaxRate(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return null
+  }
+  return numeric.toFixed(2)
 }
 
 function formatMoney(value) {
