@@ -1,5 +1,7 @@
 import { DEFAULT_CATEGORY_ID, ROOT_CATEGORY_ID } from '@/services/constants'
 import { listStockAvailableIds, setStockQuantityById } from '@/services/entities/stockAvailablesService'
+import { listStockMovementIds, deleteStockMovement } from '@/services/entities/stockMovementsService'
+import { listStockIds, deleteStock } from '@/services/entities/stocksService'
 import { listOrderInvoiceIds, deleteOrderInvoice } from '@/services/entities/orderInvoicesService'
 import { listOrderSlipIds, deleteOrderSlip } from '@/services/entities/orderSlipService'
 import { listOrderPaymentIds, deleteOrderPayment } from '@/services/entities/orderPaymentsService'
@@ -19,6 +21,9 @@ import { listSpecificPriceRuleIds, deleteSpecificPriceRule } from '@/services/en
 import { listCombinationIds, deleteCombination } from '@/services/entities/combinationsService'
 import { listProductIds, deleteProduct } from '@/services/entities/productsService'
 import { listCategoryIds, deleteCategory } from '@/services/entities/categoriesService'
+import { listTaxIds, deleteTax } from '@/services/entities/taxesService'
+import { listTaxRuleIds, deleteTaxRule } from '@/services/entities/taxRulesService'
+import { listTaxRulesGroupIds, deleteTaxRulesGroup } from '@/services/entities/taxRulesGroupsService'
 
 export async function resetData() {
   let totalActions = 0
@@ -33,6 +38,9 @@ export async function resetData() {
     }
     totalActions += 1
   }
+
+  await runDelete(listStockMovementIds, deleteStockMovement)
+  await runDelete(listStockIds, deleteStock)
 
   await runDelete(listOrderInvoiceIds, deleteOrderInvoice)
   await runDelete(listOrderSlipIds, deleteOrderSlip)
@@ -52,6 +60,9 @@ export async function resetData() {
   await runDelete(listSpecificPriceRuleIds, deleteSpecificPriceRule)
   await runDelete(listCombinationIds, deleteCombination)
   await runDelete(listProductIds, deleteProduct)
+  await runDelete(listTaxRuleIds, deleteTaxRule)
+  await runDelete(listTaxRulesGroupIds, deleteTaxRulesGroup)
+  await runDelete(listTaxIds, deleteTax)
 
   const categoryIds = await listCategoryIds()
   const filtered = categoryIds.filter((id) => ![ROOT_CATEGORY_ID, DEFAULT_CATEGORY_ID].includes(id))

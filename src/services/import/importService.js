@@ -86,12 +86,12 @@ function validateImportHeaders(target, meta) {
   const invalid = normalizedHeaders.filter((header) => !allowed.includes(header))
   const missing = required.filter((header) => !normalizedHeaders.includes(header))
 
-  // if (invalid.length) {
-  //   throwResetDataError(`Nom de colonne non conforme: ${invalid.join(', ')}`)
-  // }
-  // if (missing.length) {
-  //   throwResetDataError(`Nom de colonne non conforme: colonnes manquantes ${missing.join(', ')}`)
-  // }
+  if (invalid.length) {
+    throwResetDataError(`Nom de colonne non conforme: ${invalid.join(', ')}`)
+  }
+  if (missing.length) {
+    throwResetDataError(`Nom de colonne non conforme: colonnes manquantes ${missing.join(', ')}`)
+  }
 }
 
 function validateImportRows(target, rows) {
@@ -126,7 +126,7 @@ function validateImportRows(target, rows) {
       const numeric = toFloat(String(value), Number.NaN)
       if (Number.isFinite(numeric) && numeric < 0) {
         throwResetDataError(
-          `Montant negatif detecte (colonne ${field}, ligne ${rowNumber})`
+          `Valeur doit etre positif detecte (colonne ${field}, ligne ${rowNumber})`
         )
       }
     })

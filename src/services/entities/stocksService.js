@@ -1,4 +1,5 @@
-import { getXml, postXml } from '@/services/http/prestashopClient'
+import { deleteXml, getXml, postXml } from '@/services/http/prestashopClient'
+import { fetchAllIds } from '@/services/entities/entityUtils'
 import { buildEntityXml, getIdFromXml, parseXml, getText } from '@/services/xml/xmlUtils'
 import { toFloat, toInt } from '@/services/utils/stringUtils'
 
@@ -29,6 +30,14 @@ export async function listStocks(limit = 200) {
   const doc = parseXml(xml)
   const nodes = Array.from(doc.querySelectorAll('stock'))
   return nodes.map(parseStockNode).filter(Boolean)
+}
+
+export function listStockIds() {
+  return fetchAllIds('stocks', 'stock')
+}
+
+export async function deleteStock(id) {
+  await deleteXml(`stocks/${id}`, undefined, true)
 }
 
 export async function readStockEntry(id) {

@@ -1,4 +1,5 @@
-import { getXml, postXml } from '@/services/http/prestashopClient'
+import { deleteXml, getXml, postXml } from '@/services/http/prestashopClient'
+import { fetchAllIds } from '@/services/entities/entityUtils'
 import { buildEntityXml, getIdFromXml, parseXml, getText } from '@/services/xml/xmlUtils'
 import { toFloat, toInt } from '@/services/utils/stringUtils'
 
@@ -83,6 +84,14 @@ export async function listStockMovements({
     .map(parseStockMovementNode)
     .filter((entry) => entry.id)
     .filter((entry) => matchesDateFilter(entry, { date, fromDate, toDate }))
+}
+
+export function listStockMovementIds() {
+  return fetchAllIds('stock_movements', 'stock_mvt')
+}
+
+export async function deleteStockMovement(id) {
+  await deleteXml(`stock_movements/${id}`, undefined, true)
 }
 
 export async function createStockMovement(payload) {
