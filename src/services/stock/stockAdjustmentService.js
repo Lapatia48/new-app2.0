@@ -1,4 +1,4 @@
-import { findProductInfoByReference } from '@/services/entities/productsService'
+import { findProductInfoById, findProductInfoByReference } from '@/services/entities/productsService'
 import { findProductOptionIdByName } from '@/services/entities/productOptionsService'
 import { findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
 import { findCombinationByProductAndValueId } from '@/services/entities/combinationsService'
@@ -24,20 +24,28 @@ function parseQuantity(value) {
   return numeric
 }
 
-export async function addStockByReference({ reference, quantity, specificite, karazany }) {
+export async function addStockByReference({ reference, productId, quantity, specificite, karazany }) {
   const normalizedRef = normalizeText(reference)
-  if (!normalizedRef) {
-    throw new Error('Reference produit manquante.')
-  }
+  const resolvedProductId = Number.parseInt(String(productId ?? ''), 10)
+  const hasProductId = Number.isFinite(resolvedProductId) && resolvedProductId > 0
 
   const parsedQty = parseQuantity(quantity)
   if (!parsedQty || parsedQty <= 0) {
     throw new Error('Quantite invalide.')
   }
 
-  const productInfo = await findProductInfoByReference(normalizedRef)
+  let productInfo = null
+  if (hasProductId) {
+    productInfo = await findProductInfoById(resolvedProductId)
+  }
   if (!productInfo) {
-    throw new Error('Produit introuvable pour cette reference.')
+    if (!normalizedRef) {
+      throw new Error('Produit manquant.')
+    }
+    productInfo = await findProductInfoByReference(normalizedRef)
+  }
+  if (!productInfo) {
+    throw new Error('Produit introuvable.')
   }
 
   const normalizedSpec = normalizeText(specificite)

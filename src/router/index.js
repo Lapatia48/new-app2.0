@@ -14,6 +14,7 @@ import DataResetView from '@/views/backoffice/DataResetView.vue'
 import BackOfficeOrdersView from '@/views/backoffice/BackOfficeOrdersView.vue'
 import BackOfficeDashboardView from '@/views/backoffice/BackOfficeDashboardView.vue'
 import BackOfficeStockView from '@/views/backoffice/BackOfficeStockView.vue'
+import BackOfficeStockHistoryView from '@/views/backoffice/BackOfficeStockHistoryView.vue'
 import { isBackOfficeAuthenticated, logoutBackOffice } from '@/services/backofficeAuth'
 
 const router = createRouter({
@@ -41,6 +42,7 @@ const router = createRouter({
     { path: '/backoffice/import-oneshot', name: 'backoffice-import-oneshot', component: ImportOneShotView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/orders', name: 'backoffice-orders', component: BackOfficeOrdersView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/stocks', name: 'backoffice-stocks', component: BackOfficeStockView, meta: { requiresBackOfficeAuth: true }},
+    { path: '/backoffice/stocks/history', name: 'backoffice-stock-history', component: BackOfficeStockHistoryView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/reset',name: 'backoffice-reset',component: DataResetView, meta: { requiresBackOfficeAuth: true }}
   
   ],

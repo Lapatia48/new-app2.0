@@ -1,25 +1,27 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { listProducts } from '@/services/entities/productsService'
 import { addStockByReference } from '@/services/stock/stockAdjustmentService'
-import {
-  recordStockMovement,
-  listStockHistory,
-  buildDailyStockSummary
-} from '@/services/stock/stockHistoryService'
+import { recordStockMovement } from '@/services/stock/stockHistoryService'
 
-const reference = ref('')
+const products = ref([])
+const productsError = ref('')
+const isLoadingProducts = ref(false)
+const selectedProductId = ref('')
+
 const specificite = ref('')
 const karazany = ref('')
 const quantity = ref(1)
 const status = ref('')
 const statusType = ref('')
 const isRunning = ref(false)
-const entries = ref([])
 const lastResult = ref(null)
 
-const hasReference = computed(() => reference.value.trim() !== '')
-const dailySummary = computed(() => buildDailyStockSummary(entries.value))
+const selectedProduct = computed(() =>
+  products.value.find((product) => String(product.id) === String(selectedProductId.value)) || null
+)
 
+const hasSelection = computed(() => Boolean(selectedProduct.value?.id))
 function formatQty(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return '-'
@@ -32,48 +34,41 @@ function formatDelta(value) {
   return numeric >= 0 ? `+${numeric}` : `${numeric}`
 }
 
-async function loadHistory() {
-  if (!hasReference.value) {
-    entries.value = []
-    return
-  }
-  entries.value = listStockHistory({ reference: reference.value.trim() })
-}
-
 async function addStock() {
   status.value = ''
   statusType.value = ''
 
-  if (!hasReference.value) {
+  if (!hasSelection.value) {
     statusType.value = 'error'
-    status.value = 'Reference produit manquante.'
+    status.value = 'Selectionnez un produit.'
     return
   }
 
   isRunning.value = true
   try {
     const result = await addStockByReference({
-      reference: reference.value,
+      productId: selectedProduct.value.id,
+      reference: selectedProduct.value.reference,
       quantity: quantity.value,
       specificite: specificite.value,
       karazany: karazany.value
     })
 
-    recordStockMovement({
-      reference: reference.value.trim(),
-      productId: result.product.id,
-      productName: result.product.name || reference.value.trim(),
-      specificite: result.specificite,
-      karazany: result.karazany,
-      delta: result.quantity,
-      previousQty: result.previousQty,
-      nextQty: result.nextQty
-    })
+    try {
+      await recordStockMovement({
+        productId: result.product.id,
+        productAttributeId: result.productAttributeId,
+        delta: result.quantity,
+        priceTe: result.product.price
+      })
+    } catch (movementError) {
+      const message = movementError?.message || 'Mouvement stock non enregistre.'
+      throw new Error(`Stock mis a jour mais mouvement non enregistre: ${message}`)
+    }
 
     lastResult.value = result
     statusType.value = 'success'
     status.value = `Stock mis a jour: ${result.previousQty} -> ${result.nextQty}`
-    await loadHistory()
   } catch (error) {
     statusType.value = 'error'
     status.value = error?.message || 'Erreur lors de la mise a jour du stock.'
@@ -82,8 +77,20 @@ async function addStock() {
   }
 }
 
-watch(reference, () => {
-  loadHistory()
+async function loadProducts() {
+  isLoadingProducts.value = true
+  productsError.value = ''
+  try {
+    products.value = await listProducts(300)
+  } catch (error) {
+    productsError.value = error?.message || 'Erreur lors du chargement des produits.'
+  } finally {
+    isLoadingProducts.value = false
+  }
+}
+
+onMounted(() => {
+  loadProducts()
 })
 </script>
 
@@ -93,12 +100,10 @@ watch(reference, () => {
       <div>
         <p class="eyebrow">Backoffice</p>
         <h1>Ajout en stock</h1>
-        <p class="subtitle">Ajoute du stock et suit l evolution journaliere d un produit.</p>
+        <p class="subtitle">Ajoute du stock et enregistre le mouvement dans Prestashop.</p>
       </div>
       <div class="header-actions">
-        <button type="button" class="ghost" :disabled="isRunning" @click="loadHistory">
-          Actualiser historique
-        </button>
+        <RouterLink class="ghost" to="/backoffice/stocks/history">Voir historique</RouterLink>
       </div>
     </header>
 
@@ -106,8 +111,13 @@ watch(reference, () => {
       <div class="form-card">
         <div class="form-grid">
           <label class="field">
-            Reference produit
-            <input v-model="reference" type="text" placeholder="REF-123" />
+            Produit
+            <select v-model="selectedProductId" :disabled="isLoadingProducts">
+              <option value="">Selectionner un produit</option>
+              <option v-for="product in products" :key="product.id" :value="product.id">
+                {{ product.reference ? `${product.reference} - ${product.name}` : product.name }}
+              </option>
+            </select>
           </label>
           <label class="field">
             Quantite a ajouter
@@ -123,13 +133,11 @@ watch(reference, () => {
           </label>
         </div>
         <div class="actions">
-          <button type="button" class="primary" :disabled="isRunning" @click="addStock">
+          <button type="button" class="primary" :disabled="isRunning || !hasSelection" @click="addStock">
             {{ isRunning ? 'Mise a jour...' : 'Ajouter en stock' }}
           </button>
-          <button type="button" class="ghost" :disabled="!hasReference" @click="loadHistory">
-            Charger historique
-          </button>
         </div>
+        <p v-if="productsError" class="status error">{{ productsError }}</p>
         <p v-if="status" :class="['status', statusType]">{{ status }}</p>
       </div>
 
@@ -138,7 +146,7 @@ watch(reference, () => {
         <div class="summary-grid">
           <div>
             <p class="label">Produit</p>
-            <p class="value">{{ lastResult.product.name || reference }}</p>
+            <p class="value">{{ lastResult.product.name || selectedProduct?.name || '-' }}</p>
           </div>
           <div>
             <p class="label">Variation</p>
@@ -157,36 +165,6 @@ watch(reference, () => {
         </div>
       </div>
 
-      <div class="table-card">
-        <div class="table-header">
-          <div>
-            <h2>Evolution journaliere du stock</h2>
-            <p class="muted">Resume des ajouts par jour pour la reference selectionnee.</p>
-          </div>
-        </div>
-
-        <div v-if="!dailySummary.length" class="empty">Aucun historique disponible.</div>
-        <table v-else class="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Mouvements</th>
-              <th>Delta total</th>
-              <th>Stock debut</th>
-              <th>Stock fin</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="entry in dailySummary" :key="entry.date">
-              <td>{{ entry.date }}</td>
-              <td class="mono">{{ entry.events }}</td>
-              <td class="mono">{{ formatDelta(entry.delta) }}</td>
-              <td class="mono">{{ formatQty(entry.startQty) }}</td>
-              <td class="mono">{{ formatQty(entry.endQty) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   </section>
 </template>
@@ -272,6 +250,14 @@ watch(reference, () => {
   background: #fff;
 }
 
+.field select {
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.95rem;
+  background: #fff;
+}
+
 .actions {
   margin-top: 1rem;
   display: flex;
@@ -309,6 +295,7 @@ watch(reference, () => {
   padding: 0.55rem 1rem;
   border-radius: 999px;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .status {
