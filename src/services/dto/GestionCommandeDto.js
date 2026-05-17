@@ -6,6 +6,7 @@ import { readCombination } from '@/services/entities/combinationsService'
 import { findProductInfoById } from '@/services/entities/productsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
 import { buildOrderConfig } from '@/services/order/commandeAchatService'
+import { recordStockMovement } from '@/services/stock/stockHistoryService'
 
 const EMPTY_LABEL = '-'
 const CART_LABEL = 'dans le panier'
@@ -507,13 +508,50 @@ export function getStateOptions() {
   ].filter((s) => s.id)
 }
 
-export async function changeOrderState(orderId, stateId) {
+export async function changeOrderState(orderId, stateId, options = {}) {
   if (!orderId) throw new Error('Missing orderId')
   if (!stateId) throw new Error('Missing stateId')
   await createOrderHistory({
     id_order: String(orderId),
     id_order_state: String(stateId)
   })
+
+  const config = buildOrderConfig()
+  const pendingId = toNumber(config.orderStatePendingId, 0)
+  const paidId = toNumber(config.orderStatePaidId, 0)
+  const previousId = toNumber(options.previousStateId, 0)
+  const nextId = toNumber(stateId, 0)
+
+  if (pendingId && paidId && previousId === pendingId && nextId === paidId) {
+    let rows = Array.isArray(options.rows) ? options.rows : []
+    if (!rows.length) {
+      try {
+        const dto = await buildGestionCommandeDto(orderId)
+        rows = Array.isArray(dto?.rows) ? dto.rows : []
+      } catch (error) {
+        rows = []
+      }
+    }
+
+    if (rows.length) {
+      await Promise.all(
+        rows.map(async (row) => {
+          const productId = toNumber(row?.productId, 0)
+          if (!productId) return null
+          const productAttributeId = toNumber(row?.productAttributeId, 0)
+          const qty = toNumber(row?.quantity, 0)
+          if (!qty) return null
+          const priceTe = toFloat(row?.price, 0)
+          return recordStockMovement({
+            productId,
+            productAttributeId,
+            delta: -Math.abs(qty),
+            priceTe
+          })
+        })
+      )
+    }
+  }
 }
 
 export const changeOrderStatePut = changeOrderState

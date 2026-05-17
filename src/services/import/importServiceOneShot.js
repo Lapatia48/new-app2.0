@@ -33,13 +33,25 @@ export async function runImportOneShot({ files = [] } = {}) {
     throw new Error('Aucune image trouvee dans images/.')
   }
 
-  const productsRows = (await parseCsvFile(productsFile)).rows
-  const stocksRows = (await parseCsvFile(stocksFile)).rows
-  const ordersRows = (await parseCsvFile(ordersFile)).rows
+  const productsParsed = await parseCsvFile(productsFile)
+  const stocksParsed = await parseCsvFile(stocksFile)
+  const ordersParsed = await parseCsvFile(ordersFile)
 
-  const products = await runImport({ target: 'products', rows: productsRows })
-  const stocks = await runImport({ target: 'stocks', rows: stocksRows })
-  const orders = await runImport({ target: 'orders', rows: ordersRows })
+  const products = await runImport({
+    target: 'products',
+    rows: productsParsed.rows,
+    meta: productsParsed
+  })
+  const stocks = await runImport({
+    target: 'stocks',
+    rows: stocksParsed.rows,
+    meta: stocksParsed
+  })
+  const orders = await runImport({
+    target: 'orders',
+    rows: ordersParsed.rows,
+    meta: ordersParsed
+  })
   const images = await runImport({ target: 'images', files: imageFiles })
 
   return { products, stocks, orders, images }

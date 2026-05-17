@@ -74,7 +74,10 @@ async function saveSelectedState() {
   saving.value = true
   error.value = ''
   try {
-    await changeOrderState(props.entry.id, selectedState.value)
+    await changeOrderState(props.entry.id, selectedState.value, {
+      previousStateId: dto.value?.summary?.currentStateId || summary.value?.currentStateId,
+      rows: dto.value?.rows || details.value
+    })
     await loadDetails()
     emit('updated')
   } catch (err) {

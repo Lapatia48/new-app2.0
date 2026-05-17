@@ -2,10 +2,19 @@ import { DEFAULT_CATEGORY_ID, DEFAULT_LANG_ID } from '@/services/constants'
 import { deleteXml, getXml, postXml, putXml } from '@/services/http/prestashopClient'
 import { fetchAllIds } from '@/services/entities/entityUtils'
 import { buildEntityXml, extractIdsByTag, getIdFromXml, getText, langField, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
-import { slugify } from '@/services/utils/stringUtils'
+import { slugify, toInt } from '@/services/utils/stringUtils'
 
 export function listProductIds() {
   return fetchAllIds('products', 'product')
+}
+
+export async function listProducts(limit = 200) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 1000)
+  const xml = await getXml('products', {
+    display: '[id,reference,name]',
+    limit: `0,${cappedLimit}`
+  })
+  return parseProductSearchResults(xml)
 }
 
 export async function readProduct(id) {
@@ -102,6 +111,74 @@ export async function updateProduct(id, data, langId = DEFAULT_LANG_ID) {
 
 export async function deleteProduct(id) {
   await deleteXml(`products/${id}`, undefined, true)
+}
+
+function parseProductSearchResults(xml) {
+  const doc = parseXml(xml)
+  const nodes = Array.from(doc.querySelectorAll('product'))
+  return nodes
+    .map((node) => {
+      const id = toInt(node.getAttribute('id') || getText(node, 'id'), 0)
+      if (!id) {
+        return null
+      }
+      return {
+        id,
+        reference: getText(node, 'reference'),
+        name: getText(node, 'name')
+      }
+    })
+    .filter(Boolean)
+}
+
+export async function searchProducts(query, limit = 12) {
+  const term = String(query || '').trim()
+  if (!term) {
+    return []
+  }
+
+  const cappedLimit = Math.min(Math.max(limit, 1), 50)
+  const display = '[id,reference,name]'
+  const likeTerm = `%${term}%`
+
+  const requests = [
+    getXml('products', {
+      display,
+      limit: `0,${cappedLimit}`,
+      'filter[reference]': likeTerm
+    }),
+    getXml('products', {
+      display,
+      limit: `0,${cappedLimit}`,
+      'filter[name]': likeTerm
+    })
+  ]
+
+  if (/^\d+$/.test(term)) {
+    requests.push(
+      getXml('products', {
+        display,
+        limit: `0,${cappedLimit}`,
+        'filter[id]': term
+      })
+    )
+  }
+
+  const results = await Promise.allSettled(requests)
+  const map = new Map()
+
+  results.forEach((result) => {
+    if (result.status !== 'fulfilled' || !result.value) {
+      return
+    }
+    parseProductSearchResults(result.value).forEach((product) => {
+      if (!map.has(product.id)) {
+        map.set(product.id, product)
+      }
+    })
+  })
+
+  return Array.from(map.values())
 }
 
 function buildProductPayload(data, langId) {

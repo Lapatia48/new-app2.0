@@ -4,6 +4,7 @@ import SectionHeader from '@/components/SectionHeader.vue'
 import { parseCsvFile } from '@/services/import/csvParser'
 import { runImport } from '@/services/import/importService'
 
+const parsed = ref(null)
 const rows = ref([])
 const imageFiles = ref([])
 const status = ref('')
@@ -13,12 +14,14 @@ async function onCsvSelected(event) {
   const input = event.target
   const file = input && input.files ? input.files[0] : null
   rows.value = []
+  parsed.value = null
   status.value = ''
   if (!file) {
     return
   }
-  const parsed = await parseCsvFile(file)
-  rows.value = parsed.rows
+  const parsedFile = await parseCsvFile(file)
+  parsed.value = parsedFile
+  rows.value = parsedFile.rows
   status.value = `CSV charge: ${rows.value.length} lignes`
 }
 
@@ -55,9 +58,13 @@ async function startImport(target) {
     status.value = 'Charge un fichier CSV d abord.'
     return
   }
+  if (!parsed.value) {
+    status.value = 'CSV non valide.'
+    return
+  }
   isRunning.value = true
   status.value = 'Import en cours...'
-  runImport({ target, rows: rows.value })
+  runImport({ target, rows: rows.value, meta: parsed.value })
     .then((summary) => {
       status.value = `Import termine: ${summary.success} OK.`
     })

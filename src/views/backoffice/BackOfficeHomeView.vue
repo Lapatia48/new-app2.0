@@ -16,9 +16,10 @@ function logout() {
 
     <div class="actions">
       <RouterLink to="/backoffice/dashboard">Tableau de bord</RouterLink>
-      <RouterLink to="/backoffice/import">Import fichiers</RouterLink>
+      <!-- <RouterLink to="/backoffice/import">Import fichiers</RouterLink> -->
       <RouterLink to="/backoffice/import-oneshot">Import OneShot</RouterLink>
       <RouterLink to="/backoffice/orders">Gestion commandes</RouterLink>
+      <RouterLink to="/backoffice/stocks">Ajout stock</RouterLink>
       <RouterLink to="/backoffice/reset">Reset data</RouterLink>
       <button type="button" @click="logout">Logout</button>
     </div>

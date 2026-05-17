@@ -13,9 +13,14 @@ function toDateKey(value) {
   return parts[0] || 'Sans date'
 }
 
+function isFailedOrder(entry) {
+  const label = String(entry?.summary?.currentStateLabel || '').toLowerCase()
+  return label.includes('echec') || label.includes('erreur')
+}
+
 export async function fetchBackofficeDashboardStats() {
   const list = await listGestionCommandes()
-  const orders = list.filter((entry) => !entry?.summary?.isCart)
+  const orders = list.filter((entry) => !entry?.summary?.isCart && !isFailedOrder(entry))
 
   const map = new Map()
   let totalCount = 0
