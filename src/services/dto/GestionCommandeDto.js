@@ -1,12 +1,16 @@
-import { getXml, buildApiUrl } from '@/services/http/prestashopClient'
+import { getXml, buildApiUrl, postFrontForm } from '@/services/http/prestashopClient'
 import { xmlToJson, parseXml, extractIdsByTag } from '@/services/xml/xmlUtils'
 import { listOrderIds } from '@/services/entities/ordersService'
 import { listCartIds } from '@/services/entities/cartsService'
 import { readCombination } from '@/services/entities/combinationsService'
 import { findProductInfoById } from '@/services/entities/productsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
-import { buildOrderConfig } from '@/services/order/commandeAchatService'
+import {
+  adjustStockQuantityByProduct,
+  adjustStockQuantityByProductAttribute
+} from '@/services/entities/stockAvailablesService'
 import { recordStockMovement } from '@/services/stock/stockHistoryService'
+import { buildOrderConfig } from '@/services/order/commandeAchatService'
 
 const EMPTY_LABEL = '-'
 const CART_LABEL = 'dans le panier'
@@ -55,7 +59,9 @@ function formatMoney(value) {
 
 function formatStateLabel(stateId, config) {
   const id = toNumber(stateId, 0)
-  if (id && id === toNumber(config.orderStatePaidId, 0)) return 'acceptee'
+  if (id && id === toNumber(config.orderStatePaidId, 0)) return 'paiement accepte'
+  if (id && id === toNumber(config.orderStateDeliveredId, 0)) return 'livre'
+  if (id && id === toNumber(config.orderStateCancelledId, 0)) return 'annule'
   if (id && id === toNumber(config.orderStateErrorId, 0)) return 'echec'
   return 'en attente'
 }
@@ -502,55 +508,93 @@ async function listCartIdsByCustomer(customerId) {
 export function getStateOptions() {
   const config = buildOrderConfig()
   return [
-    { id: toNumber(config.orderStatePendingId, 0), label: 'en attente' },
-    { id: toNumber(config.orderStatePaidId, 0), label: 'acceptee' },
-    { id: toNumber(config.orderStateErrorId, 0), label: 'echec' }
+    { id: toNumber(config.orderStatePaidId, 0), label: 'paiement accepte' },
+    { id: toNumber(config.orderStateCancelledId, 0), label: 'annule' },
+    { id: toNumber(config.orderStateDeliveredId, 0), label: 'livre' }
   ].filter((s) => s.id)
 }
 
 export async function changeOrderState(orderId, stateId, options = {}) {
   if (!orderId) throw new Error('Missing orderId')
   if (!stateId) throw new Error('Missing stateId')
+
+  const config = buildOrderConfig()
+  const paidId = toNumber(config.orderStatePaidId, 0)
+  const cancelledId = toNumber(config.orderStateCancelledId, 0)
+  const deliveredId = toNumber(config.orderStateDeliveredId, 0)
+  const nextId = toNumber(stateId, 0)
+
+  let previousId = toNumber(options.previousStateId, 0)
+  let rows = Array.isArray(options.rows) ? options.rows : []
+
+  if (!previousId || !rows.length) {
+    try {
+      const dto = await buildGestionCommandeDto(orderId)
+      previousId = previousId || toNumber(dto?.summary?.currentStateId, 0)
+      if (!rows.length) {
+        rows = Array.isArray(dto?.rows) ? dto.rows : []
+      }
+    } catch (error) {
+      // Keep fallback values.
+    }
+  }
+
+  if ((nextId === cancelledId || nextId === deliveredId) && previousId !== paidId) {
+    throw new Error("Transition invalide. Seul l'etat paiement accepte peut etre annule ou livre.")
+  }
+
+  const useManualEndpoint = nextId === cancelledId || nextId === deliveredId
+
+  // if (useManualEndpoint) {
+  //   await postFrontForm('module/manualorderstate/shiporder', {
+  //     id_order: String(orderId),
+  //     id_order_state: String(nextId)
+  //   })
+  //   return
+  // }
+
   await createOrderHistory({
     id_order: String(orderId),
     id_order_state: String(stateId)
   })
 
-  const config = buildOrderConfig()
-  const pendingId = toNumber(config.orderStatePendingId, 0)
-  const paidId = toNumber(config.orderStatePaidId, 0)
-  const previousId = toNumber(options.previousStateId, 0)
-  const nextId = toNumber(stateId, 0)
+  if (!rows.length || !paidId) {
+    return
+  }
 
-  if (pendingId && paidId && previousId === pendingId && nextId === paidId) {
-    let rows = Array.isArray(options.rows) ? options.rows : []
-    if (!rows.length) {
-      try {
-        const dto = await buildGestionCommandeDto(orderId)
-        rows = Array.isArray(dto?.rows) ? dto.rows : []
-      } catch (error) {
-        rows = []
-      }
-    }
-
-    if (rows.length) {
-      await Promise.all(
-        rows.map(async (row) => {
-          const productId = toNumber(row?.productId, 0)
-          if (!productId) return null
-          const productAttributeId = toNumber(row?.productAttributeId, 0)
-          const qty = toNumber(row?.quantity, 0)
-          if (!qty) return null
-          const priceTe = toFloat(row?.price, 0)
-          return recordStockMovement({
-            productId,
-            productAttributeId,
-            delta: -Math.abs(qty),
-            priceTe
-          })
+  if (previousId === paidId && nextId === deliveredId) {
+    await Promise.all(
+      rows.map(async (row) => {
+        const productId = toNumber(row?.productId, 0)
+        if (!productId) return null
+        const productAttributeId = toNumber(row?.productAttributeId, 0)
+        const qty = toNumber(row?.quantity, 0)
+        if (!qty) return null
+        const priceTe = toFloat(row?.price, 0)
+        return recordStockMovement({
+          productId,
+          productAttributeId,
+          delta: -Math.abs(qty),
+          priceTe
         })
-      )
-    }
+      })
+    )
+  }
+
+  if (previousId === paidId && nextId === cancelledId) {
+    await Promise.all(
+      rows.map(async (row) => {
+        const productId = toNumber(row?.productId, 0)
+        if (!productId) return null
+        const productAttributeId = toNumber(row?.productAttributeId, 0)
+        const qty = toNumber(row?.quantity, 0)
+        if (!qty) return null
+        if (productAttributeId) {
+          return adjustStockQuantityByProductAttribute(productId, productAttributeId, qty)
+        }
+        return adjustStockQuantityByProduct(productId, qty)
+      })
+    )
   }
 }
 

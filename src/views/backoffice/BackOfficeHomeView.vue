@@ -16,6 +16,7 @@ function logout() {
 
     <div class="actions">
       <RouterLink to="/backoffice/dashboard">Tableau de bord</RouterLink>
+      <RouterLink to="/backoffice/stats">Statistiques ventes</RouterLink>
       <!-- <RouterLink to="/backoffice/import">Import fichiers</RouterLink> -->
       <RouterLink to="/backoffice/import-oneshot">Import OneShot</RouterLink>
       <RouterLink to="/backoffice/orders">Gestion commandes</RouterLink>

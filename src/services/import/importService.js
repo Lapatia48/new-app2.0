@@ -399,7 +399,12 @@ async function importOrders(rows) {
     const row = rows[index]
     try {
       const status = String(row.etat || '').trim()
-      if (!status) {
+      const normalizedStatus = status
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+      const isCartStatus = !status || normalizedStatus.includes('panier')
+      if (isCartStatus) {
         await createCartFromCsvRow(row, config)
       } else {
         await createOrderFromCsvRow(row, config)

@@ -15,7 +15,7 @@ function toDateKey(value) {
 
 function isFailedOrder(entry) {
   const label = String(entry?.summary?.currentStateLabel || '').toLowerCase()
-  return label.includes('echec') || label.includes('erreur')
+  return label.includes('echec') || label.includes('erreur') || label.includes('annul')
 }
 
 export async function fetchBackofficeDashboardStats() {

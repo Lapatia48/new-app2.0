@@ -13,6 +13,7 @@ import ImportOneShotView from '@/views/backoffice/ImportOneShot.vue'
 import DataResetView from '@/views/backoffice/DataResetView.vue'
 import BackOfficeOrdersView from '@/views/backoffice/BackOfficeOrdersView.vue'
 import BackOfficeDashboardView from '@/views/backoffice/BackOfficeDashboardView.vue'
+import BackOfficeStatsView from '@/views/backoffice/BackOfficeStatsView.vue'
 import BackOfficeStockView from '@/views/backoffice/BackOfficeStockView.vue'
 import BackOfficeStockHistoryView from '@/views/backoffice/BackOfficeStockHistoryView.vue'
 import EssaiView from '@/views/backoffice/EssaiView.vue'
@@ -39,6 +40,7 @@ const router = createRouter({
     { path: '/backoffice/login', name: 'backoffice-login', component: BackOfficeLoginView },
     { path: '/backoffice',name: 'backoffice-home',component: BackOfficeHomeView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/dashboard', name: 'backoffice-dashboard', component: BackOfficeDashboardView, meta: { requiresBackOfficeAuth: true }},
+    { path: '/backoffice/stats', name: 'backoffice-stats', component: BackOfficeStatsView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/import', name: 'backoffice-import',component: DataImportView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/import-oneshot', name: 'backoffice-import-oneshot', component: ImportOneShotView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/orders', name: 'backoffice-orders', component: BackOfficeOrdersView, meta: { requiresBackOfficeAuth: true }},

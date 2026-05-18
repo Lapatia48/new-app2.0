@@ -110,6 +110,24 @@ export async function setQuantityForProductAttribute(productId, productAttribute
   await setStockQuantityById(stockId, quantity)
 }
 
+export async function adjustStockQuantityByProduct(productId, delta) {
+  const current = (await getStockQuantityByProduct(productId)) ?? 0
+  const nextQty = current + Number(delta || 0)
+  await setQuantityForProduct(productId, Math.max(0, nextQty))
+  return { previousQty: current, nextQty: Math.max(0, nextQty) }
+}
+
+export async function adjustStockQuantityByProductAttribute(
+  productId,
+  productAttributeId,
+  delta
+) {
+  const current = (await getStockQuantityByProductAndAttribute(productId, productAttributeId)) ?? 0
+  const nextQty = current + Number(delta || 0)
+  await setQuantityForProductAttribute(productId, productAttributeId, Math.max(0, nextQty))
+  return { previousQty: current, nextQty: Math.max(0, nextQty) }
+}
+
 function getQuantityFromDoc(doc) {
   const node = doc.querySelector('stock_available')
   if (!node) {

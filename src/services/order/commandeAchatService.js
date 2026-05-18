@@ -5,6 +5,11 @@ import { createCart, readCart } from '@/services/entities/cartsService'
 import { createOrder, updateOrder } from '@/services/entities/ordersService'
 import { createOrderDetail } from '@/services/entities/orderDetailsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
+import {
+  adjustStockQuantityByProduct,
+  adjustStockQuantityByProductAttribute
+} from '@/services/entities/stockAvailablesService'
+import { recordStockMovement } from '@/services/stock/stockHistoryService'
 import { findProductInfoById, findProductInfoByReference } from '@/services/entities/productsService'
 import { findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
 import { findCombinationByProductAndValueId, readCombination } from '@/services/entities/combinationsService'
@@ -97,6 +102,12 @@ export async function createOrderFromCsvRow(row, config) {
     })
   }
 
+  await applyOrderStateStockEffects({
+    orderStateId,
+    items: resolvedItems,
+    config
+  })
+
   return orderId
 }
 
@@ -150,7 +161,7 @@ export async function createOrderFromCartId(cartId, config) {
   }
 
   const totals = computeOrderTotals(items)
-  const orderStateId = config.orderStatePendingId
+  const orderStateId = config.orderStatePaidId
 
   const orderId = await createOrder({
     id_cart: cartId,
@@ -268,7 +279,9 @@ export function buildOrderConfig() {
     cashModule: (import.meta.env.VITE_CASH_MODULE || 'ps_cashondelivery').trim(),
     orderStatePendingId: toInt(import.meta.env.VITE_ORDER_STATE_PENDING_ID || '0', 0),
     orderStatePaidId: toInt(import.meta.env.VITE_ORDER_STATE_PAID_ID || '0', 0),
-    orderStateErrorId: toInt(import.meta.env.VITE_ORDER_STATE_ERROR_ID || '0', 0)
+    orderStateErrorId: toInt(import.meta.env.VITE_ORDER_STATE_ERROR_ID || '0', 0),
+    orderStateCancelledId: toInt(import.meta.env.VITE_ORDER_STATE_CANCELLED_ID || '0', 0),
+    orderStateDeliveredId: toInt(import.meta.env.VITE_ORDER_STATE_DELIVERED_ID || '0', 0)
   }
 }
 
@@ -291,8 +304,8 @@ export function validateOrderConfig(config) {
   if (!config.warehouseId) {
     throw new Error('Missing VITE_DEFAULT_WAREHOUSE_ID')
   }
-  if (!config.orderStatePendingId) {
-    throw new Error('Missing VITE_ORDER_STATE_PENDING_ID')
+  if (!config.orderStatePaidId) {
+    throw new Error('Missing VITE_ORDER_STATE_PAID_ID')
   }
 }
 
@@ -594,13 +607,36 @@ async function getCombinationPriceImpact(combinationId, cache) {
 
 function resolveOrderStateId(status, config) {
   const normalized = normalizeStatus(status)
-  if (normalized.includes('accepte')) {
-    return config.orderStatePaidId
+  if (normalized.includes('annul')) {
+    if (!config.orderStateCancelledId) {
+      throw new Error('Missing VITE_ORDER_STATE_CANCELLED_ID')
+    }
+    return config.orderStateCancelledId
   }
-  if (normalized.includes('erreur')) {
+  if (normalized.includes('livr')) {
+    if (!config.orderStateDeliveredId) {
+      throw new Error('Missing VITE_ORDER_STATE_DELIVERED_ID')
+    }
+    return config.orderStateDeliveredId
+  }
+  if (normalized.includes('echec') || normalized.includes('erreur')) {
     return config.orderStateErrorId
   }
-  return config.orderStatePendingId
+  if (
+    normalized.includes('accepte') ||
+    normalized.includes('paiement') ||
+    normalized.includes('paiment') ||
+    normalized.includes('effectue')
+  ) {
+    return config.orderStatePaidId
+  }
+  if (config.orderStatePaidId) {
+    return config.orderStatePaidId
+  }
+  if (config.orderStatePendingId) {
+    return config.orderStatePendingId
+  }
+  return config.orderStateErrorId
 }
 
 function normalizeStatus(value) {
@@ -640,6 +676,45 @@ async function updateOrderDate(orderId, orderDate) {
     delete sanitized.associations
   }
   await updateOrder(orderId, { ...sanitized, date_add: orderDate, date_upd: orderDate })
+}
+
+async function applyOrderStateStockEffects({ orderStateId, items = [], config }) {
+  const deliveredId = toInt(config?.orderStateDeliveredId, 0)
+  const cancelledId = toInt(config?.orderStateCancelledId, 0)
+
+  if (!orderStateId || !items.length) {
+    return
+  }
+
+  if (orderStateId === deliveredId) {
+    await Promise.all(
+      items.map(async (item) => {
+        if (!item?.id || !item.quantity) return null
+        return recordStockMovement({
+          productId: item.id,
+          productAttributeId: item.productAttributeId || 0,
+          delta: -Math.abs(item.quantity),
+          priceTe: item.price
+        })
+      })
+    )
+  }
+
+  if (orderStateId === cancelledId) {
+    await Promise.all(
+      items.map(async (item) => {
+        if (!item?.id || !item.quantity) return null
+        if (item.productAttributeId) {
+          return adjustStockQuantityByProductAttribute(
+            item.id,
+            item.productAttributeId,
+            item.quantity
+          )
+        }
+        return adjustStockQuantityByProduct(item.id, item.quantity)
+      })
+    )
+  }
 }
 
 function stripXmlAttrs(value) {

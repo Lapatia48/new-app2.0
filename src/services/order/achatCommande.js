@@ -12,5 +12,5 @@ export const achatCommandeTemplate = {
       karazany: ''
     }
   ],
-  etat: 'en attente paiement a la livraison'
+  etat: 'paiement accepte'
 }

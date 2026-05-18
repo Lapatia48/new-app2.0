@@ -177,7 +177,7 @@ async function submitOrder() {
       pwd: '',
       adresse: address.value.trim(),
       achat: buildOrderItems(items.value),
-      etat: 'en attente paiement a la livraison'
+      etat: 'paiement accepte'
     }
 
     const orderId = await createOrderFromCsvRow(row, config)

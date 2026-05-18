@@ -64,7 +64,11 @@ function formatAddress(address) {
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
   if (normalized.includes('panier')) return 'cart'
-  if (normalized.includes('accep')) return 'paid'
+  if (normalized.includes('paiement') || normalized.includes('paiment') || normalized.includes('accep')) {
+    return 'paid'
+  }
+  if (normalized.includes('annul')) return 'cancelled'
+  if (normalized.includes('livr')) return 'delivered'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
 }
@@ -96,7 +100,7 @@ function close() {
 
       <div class="state-card">
         <div class="state-info">
-          <p class="label">Etat de paiement</p>
+          <p class="label">Etat commande</p>
           <span class="badge" :class="stateClass(summary.currentStateLabel)">
             {{ summary.currentStateLabel }}
           </span>
@@ -310,9 +314,19 @@ function close() {
   color: #35518f;
 }
 
+.badge.cancelled {
+  background: #fbe9e7;
+  color: #9b3a2f;
+}
+
 .badge.paid {
   background: #d4edda;
   color: #1f6b2f;
+}
+
+.badge.delivered {
+  background: #e6f4ea;
+  color: #246b3b;
 }
 
 .badge.error {
