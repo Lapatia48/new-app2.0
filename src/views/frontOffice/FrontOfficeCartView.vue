@@ -2,9 +2,11 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/services/frontoffice/cartStore'
+import { useFrontofficeSession } from '@/services/frontoffice/frontofficeSession'
 
 const router = useRouter()
 const { items, total, updateItem, removeItem, clearCart } = useCartStore()
+const { isLoggedIn } = useFrontofficeSession()
 
 const hasItems = computed(() => items.value.length > 0)
 
@@ -14,7 +16,15 @@ function formatMoney(value) {
 }
 
 function goCheckout() {
-  router.push('/frontoffice/checkout')
+  if (!isLoggedIn.value) {
+    router.push({
+      name: 'frontoffice-users',
+      query: { redirect: '/frontoffice/checkout', step: '3' }
+    })
+    return
+  }
+
+  router.push({ path: '/frontoffice/checkout', query: { step: '3' } })
 }
 </script>
 

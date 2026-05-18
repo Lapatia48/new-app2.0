@@ -544,19 +544,36 @@ export async function changeOrderState(orderId, stateId, options = {}) {
   }
 
   const useManualEndpoint = nextId === cancelledId || nextId === deliveredId
-
-  // if (useManualEndpoint) {
-  //   await postFrontForm('module/manualorderstate/shiporder', {
-  //     id_order: String(orderId),
-  //     id_order_state: String(nextId)
-  //   })
-  //   return
-  // }
-
-  await createOrderHistory({
-    id_order: String(orderId),
-    id_order_state: String(stateId)
-  })
+  if (useManualEndpoint) {
+    try {
+      await postFrontForm('module/manualorderstate/shiporder', {
+        id_order: String(orderId),
+        id_order_state: String(nextId)
+      })
+      return
+    } catch (error) {
+      // If the custom front endpoint fails (500), fall back to using the webservice
+      // history endpoint so the state still changes. Surface a clearer error when
+      // both approaches fail.
+      console.error('manualorderstate front API failed:', error?.message || error)
+      try {
+        await createOrderHistory({
+          id_order: String(orderId),
+          id_order_state: String(stateId)
+        })
+      } catch (err2) {
+        throw new Error(
+          `manualorderstate failed: ${error?.message || error}. fallback createOrderHistory failed: ${err2?.message || err2}`
+        )
+      }
+      // continue execution so stock adjustments occur below
+    }
+  } else {
+    await createOrderHistory({
+      id_order: String(orderId),
+      id_order_state: String(stateId)
+    })
+  }
 
   if (!rows.length || !paidId) {
     return

@@ -66,11 +66,16 @@ export async function findProductInfoByReference(reference) {
     return null
   }
   const name = getText(node, 'name')
-  const price = Number.parseFloat(getText(node, 'price') || '0')
+  const rawPrice = getText(node, 'price') || '0'
+  // Try to read a tax-included price if available in the node (price_ttc or price_tax_incl)
+  const rawPriceTtc = getText(node, 'price_ttc') || getText(node, 'price_tax_incl') || ''
+  const price = Number.parseFloat(rawPrice || '0')
+  const priceTtc = rawPriceTtc ? Number.parseFloat(rawPriceTtc) : Number.NaN
   return {
     id,
     name,
-    price: Number.isFinite(price) ? price : 0
+    price: Number.isFinite(price) ? price : 0,
+    priceTtc: Number.isFinite(priceTtc) ? priceTtc : null
   }
 }
 
@@ -95,11 +100,14 @@ export async function findProductInfoById(productId) {
   const name = getText(node, 'name')
   const reference = getText(node, 'reference')
   const price = Number.parseFloat(getText(node, 'price') || '0')
+  const rawPriceTtc = getText(node, 'price_ttc') || getText(node, 'price_tax_incl') || ''
+  const priceTtc = rawPriceTtc ? Number.parseFloat(rawPriceTtc) : Number.NaN
   return {
     id: resolvedId,
     name,
     reference,
-    price: Number.isFinite(price) ? price : 0
+    price: Number.isFinite(price) ? price : 0,
+    priceTtc: Number.isFinite(priceTtc) ? priceTtc : null
   }
 }
 

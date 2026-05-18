@@ -399,12 +399,14 @@ async function resolveOrderItems(items) {
       continue
     }
     let productAttributeId = 0
-    let price = info.price
+    // Prefer TTC price when available, otherwise fall back to base price
+    let price = info.priceTtc ?? info.price
     if (item.karazany) {
       const combination = await findCombinationForKarazany(info.id, item.karazany)
       if (combination) {
         productAttributeId = combination.id
-        price = info.price + combination.priceImpact
+        const base = info.priceTtc ?? info.price
+        price = base + combination.priceImpact
       } else {
         console.log(`Order: combination not found ${item.reference} ${item.karazany}`)
       }
@@ -558,7 +560,8 @@ async function resolveCartItems(cart) {
     }
 
     const priceImpact = await getCombinationPriceImpact(productAttributeId, combinationCache)
-    const price = (productInfo.price || 0) + priceImpact
+    const basePrice = productInfo.priceTtc ?? productInfo.price
+    const price = (basePrice || 0) + priceImpact
 
     items.push({
       id: productInfo.id,

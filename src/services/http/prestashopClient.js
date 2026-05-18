@@ -88,7 +88,16 @@ async function requestXml(path, options = {}) {
     if (options.ignore404 && response.status === 404) {
       return ''
     }
-    throw new Error(`PrestaShop API error ${response.status}: ${text}`)
+    // Include a short snippet of the request body to help debug validation errors
+    let bodySnippet = ''
+    try {
+      if (body) {
+        bodySnippet = String(body).slice(0, 1024)
+      }
+    } catch (e) {
+      bodySnippet = ''
+    }
+    throw new Error(`PrestaShop API error ${response.status}: ${text} \n-- request body (snippet): ${bodySnippet}`)
   }
   return text
 }

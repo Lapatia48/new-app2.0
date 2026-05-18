@@ -233,9 +233,10 @@ async function importProducts(rows) {
     const categoryId = await ensureCategoryId(categoryName)
     const availableDate = toIsoDate(row.date_availability_produit || row.date_produit)
     const taxRate = parseTaxRate(row.taxe ?? row.tax)
-    const taxRulesGroupId = taxRate === null
-      ? 0
-      : await ensureTaxRulesGroupId(taxRate, taxContext)
+    // const taxRulesGroupId = taxRate === null
+    //   ? 0
+    //   : await ensureTaxRulesGroupId(taxRate, taxContext)
+    const taxRulesGroupId = 0
 
     const input = {
       name,
@@ -300,9 +301,14 @@ async function importStocks(rows) {
       hasCombination.add(reference)
       const groupId = await ensureProductOptionId(specificite, optionCache)
       const valueId = await ensureProductOptionValueId(groupId, karazany, valueCache)
-      const salePrice = row.prix_vente_ttc
-        ? toFloat(row.prix_vente_ttc || '0', productInfo.price)
-        : productInfo.price
+      // CSV fournit un prix TTC (`prix_vente_ttc`). If the product API exposes
+      // `price_ttc` we should interpret CSV price as TTC and compute salePrice
+      // relative to the product's TTC price to avoid HT/TTC mismatch when
+      // computing combination `priceImpact`.
+      const salePriceRaw = row.prix_vente_ttc || ''
+      const salePrice = salePriceRaw
+        ? toFloat(salePriceRaw, Number.isFinite(productInfo.priceTtc) ? productInfo.priceTtc : productInfo.price)
+        : (Number.isFinite(productInfo.priceTtc) ? productInfo.priceTtc : productInfo.price)
       const combinationId = await ensureCombinationId(
         productInfo,
         valueId,

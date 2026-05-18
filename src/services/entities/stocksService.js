@@ -80,18 +80,24 @@ export async function createStockEntry({
     isbn,
     upc,
     mpn,
+    // Ensure integer quantities are sent to the API (no decimals, no empty values)
     physical_quantity: toInt(physicalQuantity, 0),
     usable_quantity: toInt(usableQuantity, 0),
     price_te: toFloat(String(priceTe ?? '0'), 0)
   }
 
   const xml = buildEntityXml('stock', payload)
-  const responseXml = await postXml('stocks', xml)
-  const id = getIdFromXml(responseXml, 'stock')
-  if (!id) {
-    throw new Error('Missing stock id in response')
+  try {
+    const responseXml = await postXml('stocks', xml)
+    const id = getIdFromXml(responseXml, 'stock')
+    if (!id) {
+      throw new Error('Missing stock id in response')
+    }
+    return id
+  } catch (error) {
+    // Re-throw with context to help troubleshooting validation errors from PrestaShop
+    throw new Error(`Failed to create stock entry (productId=${idProduct}, attribute=${idAttribute}): ${error?.message || error}`)
   }
-  return id
 }
 
 export async function findStockEntry({ productId, productAttributeId = 0, warehouseId } = {}) {

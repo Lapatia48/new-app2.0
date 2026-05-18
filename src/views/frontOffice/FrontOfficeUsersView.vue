@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { getXml } from '@/services/http/prestashopClient'
 import { parseXml, getText } from '@/services/xml/xmlUtils'
 import { useFrontofficeSession } from '@/services/frontoffice/frontofficeSession'
 
 const router = useRouter()
+const route = useRoute()
 const { user, setUser, clearUser } = useFrontofficeSession()
 
 const customers = ref([])
@@ -16,6 +18,33 @@ const query = ref('')
 function toNumber(value, fallback = null) {
   const parsed = Number.parseInt(String(value ?? ''), 10)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function getRedirectTarget() {
+  const redirect = route.query.redirect
+  if (typeof redirect !== 'string') {
+    return null
+  }
+
+  return redirect.startsWith('/frontoffice/') ? redirect : null
+}
+
+function goToRedirectTarget() {
+  const redirect = getRedirectTarget()
+  if (!redirect) {
+    router.push('/frontoffice/catalog')
+    return
+  }
+
+  const query = {}
+  if (typeof route.query.cartId === 'string' && route.query.cartId.trim()) {
+    query.cartId = route.query.cartId
+  }
+  if (typeof route.query.step === 'string' && route.query.step.trim()) {
+    query.step = route.query.step
+  }
+
+  router.push({ path: redirect, query })
 }
 
 function buildCustomer(node) {
@@ -71,7 +100,7 @@ function connectCustomer(entry) {
     return
   }
   setUser(entry)
-  router.push('/frontoffice/catalog')
+  goToRedirectTarget()
 }
 
 function continueAnonymous() {

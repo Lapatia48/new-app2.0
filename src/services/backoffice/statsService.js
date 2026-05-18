@@ -56,13 +56,32 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : [value]
 }
 
+function dedupeNormalizedRows(rows) {
+  const map = new Map()
+
+  for (const row of rows) {
+    const key = `${row.productId}:${row.productAttributeId || 0}`
+    const existing = map.get(key)
+    if (!existing) {
+      map.set(key, row)
+      continue
+    }
+
+    const existingScore = Math.abs(existing.totalExcl || 0) + Math.abs(existing.quantity || 0)
+    const rowScore = Math.abs(row.totalExcl || 0) + Math.abs(row.quantity || 0)
+    map.set(key, rowScore > existingScore ? row : existing)
+  }
+
+  return Array.from(map.values())
+}
+
 function normalizeOrderRows(orderObj) {
   const assoc = orderObj?.associations || {}
   const rowsNode = assoc.order_rows?.order_row
   const rawRows = ensureArray(rowsNode)
   if (!rawRows.length) return []
 
-  return rawRows
+  const normalizedRows = rawRows
     .map((row) => {
       const productId = toInt(pickText(row.product_id, row.id_product), 0)
       const productAttributeId = toInt(
@@ -93,6 +112,8 @@ function normalizeOrderRows(orderObj) {
       }
     })
     .filter(Boolean)
+
+  return dedupeNormalizedRows(normalizedRows)
 }
 
 function shouldIncludeOrder(order, config) {
