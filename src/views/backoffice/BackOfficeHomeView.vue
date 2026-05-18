@@ -21,7 +21,7 @@ function logout() {
       <RouterLink to="/backoffice/import-oneshot">Import OneShot</RouterLink>
       <RouterLink to="/backoffice/orders">Gestion commandes</RouterLink>
       <RouterLink to="/backoffice/stocks">Ajout stock</RouterLink>
-      <!-- <RouterLink to="/backoffice/essai">Essai</RouterLink> -->
+      <RouterLink to="/backoffice/tableau-stock">Tableau des stocks</RouterLink>
       <RouterLink to="/backoffice/reset">Reset data</RouterLink>
       <button type="button" @click="logout">Logout</button>
     </div>

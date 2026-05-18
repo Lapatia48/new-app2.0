@@ -18,6 +18,7 @@ import BackOfficeStockView from '@/views/backoffice/BackOfficeStockView.vue'
 import BackOfficeStockHistoryView from '@/views/backoffice/BackOfficeStockHistoryView.vue'
 import EssaiView from '@/views/backoffice/EssaiView.vue'
 import { isBackOfficeAuthenticated, logoutBackOffice } from '@/services/backofficeAuth'
+import TableauStock from '../views/backoffice/TableauStock.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -47,7 +48,8 @@ const router = createRouter({
     { path: '/backoffice/stocks', name: 'backoffice-stocks', component: BackOfficeStockView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/stocks/history', name: 'backoffice-stock-history', component: BackOfficeStockHistoryView, meta: { requiresBackOfficeAuth: true }},
     { path: '/backoffice/essai', name: 'backoffice-essai', component: EssaiView, meta: { requiresBackOfficeAuth: true }},
-    { path: '/backoffice/reset',name: 'backoffice-reset',component: DataResetView, meta: { requiresBackOfficeAuth: true }}
+    { path: '/backoffice/reset',name: 'backoffice-reset',component: DataResetView, meta: { requiresBackOfficeAuth: true }},
+    { path: '/backoffice/tableau-stock',name: 'tableau-stock',component: TableauStock, meta: { requiresBackOfficeAuth: true }}
   
   ],
   scrollBehavior() {

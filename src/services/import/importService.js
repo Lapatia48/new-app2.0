@@ -413,7 +413,7 @@ async function importOrders(rows) {
       if (isCartStatus) {
         await createCartFromCsvRow(row, config)
       } else {
-        await createOrderFromCsvRow(row, config)
+        await createOrderFromCsvRow(row, config, { preserveStock: true })
       }
       success += 1
     } catch (error) {

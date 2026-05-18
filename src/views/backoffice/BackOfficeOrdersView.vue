@@ -2,6 +2,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { listGestionCommandes, changeOrderState } from '@/services/dto/GestionCommandeDto'
 import { buildOrderConfig } from '@/services/order/commandeAchatService'
+import {
+  getStockQuantityByProduct,
+  getStockQuantityByProductAndAttribute,
+  setQuantityForProduct,
+  setQuantityForProductAttribute
+} from '@/services/entities/stockAvailablesService'
 import OrderDetail from '@/components/backoffice/OrderDetail.vue'
 
 const orders = ref([])
@@ -122,18 +128,80 @@ function isUpdating(entry, nextStateId) {
   return updatingId.value === entry?.summary?.id && updatingState.value === nextStateId
 }
 
+async function snapshotOrderStock(rows = []) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return []
+  }
+
+  const snapshots = await Promise.all(
+    rows.map(async (row) => {
+      const productId = Number.parseInt(String(row?.productId ?? ''), 10)
+      if (!productId) {
+        return null
+      }
+      const productAttributeId =
+        Number.parseInt(String(row?.productAttributeId ?? 0), 10) || 0
+      const quantity = Number.parseInt(String(row?.quantity ?? ''), 10) || 0
+      if (!quantity) {
+        return null
+      }
+      const current = productAttributeId
+        ? await getStockQuantityByProductAndAttribute(productId, productAttributeId)
+        : await getStockQuantityByProduct(productId)
+      return {
+        productId,
+        productAttributeId,
+        quantity,
+        currentQty: Number.isFinite(current) ? current : 0
+      }
+    })
+  )
+
+  return snapshots.filter(Boolean)
+}
+
+async function forceCancelStock(snapshots = []) {
+  if (!Array.isArray(snapshots) || !snapshots.length) {
+    return
+  }
+
+  await Promise.all(
+    snapshots.map(async (snapshot) => {
+      if (!snapshot?.productId) {
+        return null
+      }
+      const target = Math.max(0, (snapshot.currentQty || 0) - (snapshot.quantity || 0))
+      if (snapshot.productAttributeId) {
+        return setQuantityForProductAttribute(
+          snapshot.productId,
+          snapshot.productAttributeId,
+          target
+        )
+      }
+      return setQuantityForProduct(snapshot.productId, target)
+    })
+  )
+}
+
 async function updateState(entry, nextStateId) {
   if (!canSwitch(entry, nextStateId)) {
     return
   }
+  const shouldForceCancel = nextStateId === stateIds.cancelled
   updatingId.value = entry.summary.id
   updatingState.value = nextStateId
   error.value = ''
   try {
+    const stockSnapshots = shouldForceCancel
+      ? await snapshotOrderStock(entry.rows || [])
+      : []
     await changeOrderState(entry.summary.id, nextStateId, {
       previousStateId: entry.summary.currentStateId,
       rows: entry.rows || []
     })
+    if (shouldForceCancel && stockSnapshots.length) {
+      await forceCancelStock(stockSnapshots)
+    }
     await loadOrders()
   } catch (err) {
     error.value = err?.message || "Erreur lors de la mise a jour de l'etat."

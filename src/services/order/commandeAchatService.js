@@ -8,6 +8,10 @@ import { createOrderHistory } from '@/services/entities/orderHistoriesService'
 import {
   adjustStockQuantityByProduct,
   adjustStockQuantityByProductAttribute,
+  getStockQuantityByProduct,
+  getStockQuantityByProductAndAttribute,
+  setQuantityForProduct,
+  setQuantityForProductAttribute,
   validateStockAvailability
 } from '@/services/entities/stockAvailablesService'
 import { recordStockMovement } from '@/services/stock/stockHistoryService'
@@ -18,7 +22,9 @@ import { getXml } from '@/services/http/prestashopClient'
 import { toFloat, toInt } from '@/services/utils/stringUtils'
 import { getText, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
 
-export async function createOrderFromCsvRow(row, config) {
+export async function createOrderFromCsvRow(row, config, options = {}) {
+  const { preserveStock = false, skipStockAdjustments = false } = options || {}
+  const shouldSkipStockAdjustments = skipStockAdjustments || preserveStock
   const orderItems = parseOrderItems(row.achat)
   if (!orderItems.length) {
     throw new Error('Empty achat')
@@ -38,6 +44,10 @@ export async function createOrderFromCsvRow(row, config) {
 
   // Valider que le stock est disponible pour tous les items
   await validateOrderItemsStock(resolvedItems)
+
+  const stockSnapshots = preserveStock
+    ? await snapshotStockLevels(resolvedItems)
+    : []
 
   const cartId = await createCartForOrder(customerId, addressId, resolvedItems, config)
   const totals = computeOrderTotals(resolvedItems)
@@ -106,11 +116,17 @@ export async function createOrderFromCsvRow(row, config) {
     })
   }
 
-  await applyOrderStateStockEffects({
-    orderStateId,
-    items: resolvedItems,
-    config
-  })
+  if (!shouldSkipStockAdjustments) {
+    await applyOrderStateStockEffects({
+      orderStateId,
+      items: resolvedItems,
+      config
+    })
+  }
+
+  if (preserveStock) {
+    await restoreStockLevels(stockSnapshots)
+  }
 
   return orderId
 }
@@ -725,6 +741,54 @@ async function applyOrderStateStockEffects({ orderStateId, items = [], config })
       })
     )
   }
+}
+
+async function snapshotStockLevels(items = []) {
+  if (!Array.isArray(items) || !items.length) {
+    return []
+  }
+
+  const snapshots = await Promise.all(
+    items.map(async (item) => {
+      if (!item?.id) {
+        return null
+      }
+      const productAttributeId = item.productAttributeId || 0
+      const current = productAttributeId
+        ? await getStockQuantityByProductAndAttribute(item.id, productAttributeId)
+        : await getStockQuantityByProduct(item.id)
+      return {
+        productId: item.id,
+        productAttributeId,
+        currentQty: Number.isFinite(current) ? current : 0
+      }
+    })
+  )
+
+  return snapshots.filter(Boolean)
+}
+
+async function restoreStockLevels(snapshots = []) {
+  if (!Array.isArray(snapshots) || !snapshots.length) {
+    return
+  }
+
+  await Promise.all(
+    snapshots.map(async (snapshot) => {
+      if (!snapshot?.productId) {
+        return null
+      }
+      const quantity = Number.isFinite(snapshot.currentQty) ? snapshot.currentQty : 0
+      if (snapshot.productAttributeId) {
+        return setQuantityForProductAttribute(
+          snapshot.productId,
+          snapshot.productAttributeId,
+          quantity
+        )
+      }
+      return setQuantityForProduct(snapshot.productId, quantity)
+    })
+  )
 }
 
 function stripXmlAttrs(value) {
