@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { listGestionCommandes } from '@/services/dto/GestionCommandeDto'
 import OrderDetail from '@/components/backoffice/OrderDetail.vue'
 
@@ -8,6 +8,51 @@ const loading = ref(false)
 const error = ref('')
 const selected = ref(null)
 const showDetail = ref(false)
+const searchQuery = ref('')
+const stateQuery = ref('')
+const dateQuery = ref('')
+
+const stateOptions = [
+  { value: '', label: 'Tous les etats' },
+  { value: 'cart', label: 'dans le panier' },
+  { value: 'error', label: 'echec' },
+  { value: 'paid', label: 'acceptee' }
+]
+
+const filteredOrders = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  const state = stateQuery.value
+  const date = dateQuery.value
+
+  return orders.value.filter((entry) => {
+    const summary = entry?.summary || {}
+    const stateValue = stateClass(summary.currentStateLabel)
+
+    if (state && stateValue !== state) {
+      return false
+    }
+
+    if (date && String(summary.date || '').slice(0, 10) !== date) {
+      return false
+    }
+
+    if (!query) {
+      return true
+    }
+
+    const searchable = [
+      summary.id,
+      summary.customerName,
+      summary.date,
+      summary.totalPaid,
+      summary.currentStateLabel
+    ]
+      .map((value) => String(value || '').toLowerCase())
+      .join(' ')
+
+    return searchable.includes(query)
+  })
+})
 
 async function loadOrders() {
   loading.value = true
@@ -29,6 +74,12 @@ function openDetail(entry) {
 function closeDetail() {
   selected.value = null
   showDetail.value = false
+}
+
+function resetFilters() {
+  searchQuery.value = ''
+  stateQuery.value = ''
+  dateQuery.value = ''
 }
 
 function stateClass(label) {
@@ -68,7 +119,35 @@ onMounted(() => {
     <div v-else-if="!orders.length" class="empty">Aucune commande pour le moment.</div>
 
     <div v-else class="table-card">
-      <table class="orders">
+      <div class="filters">
+        <label class="filter search">
+          Recherche globale
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="ID, client, etat, total..."
+          />
+        </label>
+        <label class="filter">
+          Etat
+          <select v-model="stateQuery">
+            <option v-for="option in stateOptions" :key="option.value || 'all'" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label class="filter">
+          Date
+          <input v-model="dateQuery" type="date" />
+        </label>
+        <button type="button" class="ghost" @click="resetFilters">Reinitialiser</button>
+      </div>
+
+      <div v-if="!filteredOrders.length" class="empty in-card">
+        Aucune commande ne correspond aux filtres.
+      </div>
+
+      <table v-else class="orders">
         <thead>
           <tr>
             <th>ID</th>
@@ -80,7 +159,11 @@ onMounted(() => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(entry, index) in orders" :key="entry.summary.id" :style="{ '--row-index': index }">
+          <tr
+            v-for="(entry, index) in filteredOrders"
+            :key="entry.summary.id"
+            :style="{ '--row-index': index }"
+          >
             <td class="mono">#{{ entry.summary.id }}</td>
             <td>{{ entry.summary.date }}</td>
             <td>{{ entry.summary.customerName }}</td>
@@ -196,12 +279,46 @@ h1 {
   background: rgba(255, 255, 255, 0.6);
 }
 
+.empty.in-card {
+  margin-bottom: 0.5rem;
+}
+
 .table-card {
   background: var(--card);
   border-radius: 16px;
   border: 1px solid var(--line);
+  padding: 1rem;
   overflow-x: auto;
   animation: rise 0.35s ease;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.filter {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.filter.search {
+  min-width: min(320px, 100%);
+  flex: 1;
+}
+
+input,
+select {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d9d0c5;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
 }
 
 .orders {
