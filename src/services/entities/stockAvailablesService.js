@@ -164,6 +164,36 @@ export async function getStockQuantityByProductAndAttribute(productId, productAt
   return getQuantityFromDoc(doc)
 }
 
+/**
+ * Valide que la quantité demandée est disponible en stock
+ * @param {number} productId - ID du produit
+ * @param {number} requestedQuantity - Quantité demandée
+ * @param {number} [productAttributeId] - ID de l'attribut produit (optionnel)
+ * @throws {Error} Si le stock est insuffisant
+ * @returns {Promise<boolean>} true si le stock est suffisant
+ */
+export async function validateStockAvailability(productId, requestedQuantity, productAttributeId = 0) {
+  const normalizedQty = Number.parseInt(String(requestedQuantity ?? 0), 10)
+  
+  if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+    throw new Error('Quantité invalide')
+  }
+  
+  const availableStock = productAttributeId
+    ? await getStockQuantityByProductAndAttribute(productId, productAttributeId)
+    : await getStockQuantityByProduct(productId)
+  
+  const stockQty = availableStock ?? 0
+  
+  if (stockQty < normalizedQty) {
+    throw new Error(
+      `Stock insuffisant. Disponible: ${Math.max(0, stockQty)}, Demandé: ${normalizedQty}`
+    )
+  }
+  
+  return true
+}
+
 function getText(node, selector, fallback = '') {
   const el = node.querySelector(selector)
   return el && el.textContent ? el.textContent.trim() : fallback

@@ -7,7 +7,8 @@ import { createOrderDetail } from '@/services/entities/orderDetailsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
 import {
   adjustStockQuantityByProduct,
-  adjustStockQuantityByProductAttribute
+  adjustStockQuantityByProductAttribute,
+  validateStockAvailability
 } from '@/services/entities/stockAvailablesService'
 import { recordStockMovement } from '@/services/stock/stockHistoryService'
 import { findProductInfoById, findProductInfoByReference } from '@/services/entities/productsService'
@@ -34,6 +35,9 @@ export async function createOrderFromCsvRow(row, config) {
   if (!resolvedItems.length) {
     throw new Error('No valid products')
   }
+
+  // Valider que le stock est disponible pour tous les items
+  await validateOrderItemsStock(resolvedItems)
 
   const cartId = await createCartForOrder(customerId, addressId, resolvedItems, config)
   const totals = computeOrderTotals(resolvedItems)
@@ -159,6 +163,9 @@ export async function createOrderFromCartId(cartId, config) {
   if (!items.length) {
     throw new Error('Panier vide')
   }
+
+  // Valider que le stock est disponible pour tous les items
+  await validateOrderItemsStock(items)
 
   const totals = computeOrderTotals(items)
   const orderStateId = config.orderStatePaidId
@@ -768,4 +775,26 @@ function parseOrderDate(dateStr) {
   }
 
   return `${isoDate} 00:00:00`
+}
+
+/**
+ * Valide que tous les items de la commande ont suffisamment de stock
+ * @async
+ * @param {Array<Object>} items - Les items de la commande
+ * @param {number} items[].id - ID du produit
+ * @param {number} items[].quantity - Quantité demandée
+ * @param {number} [items[].productAttributeId] - ID de l'attribut produit (optionnel)
+ * @throws {Error} Si au moins un item n'a pas suffisamment de stock
+ * @returns {Promise<void>}
+ */
+async function validateOrderItemsStock(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return
+  }
+
+  const validations = items.map((item) =>
+    validateStockAvailability(item.id, item.quantity, item.productAttributeId || 0)
+  )
+
+  await Promise.all(validations)
 }
