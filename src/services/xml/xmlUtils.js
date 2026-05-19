@@ -126,5 +126,13 @@ function buildNode(tag, value) {
       .join('')
     return `<${tag}${attrsText}>${inner}</${tag}>`
   }
+  // For primitive values, avoid wrapping pure numeric values in CDATA so the
+  // webservice receives plain numbers (helps validation like isUnsignedInt).
+  const raw = String(value)
+  const trimmed = raw.trim()
+  const isNumeric = /^-?\d+(?:\.\d+)?$/.test(trimmed)
+  if (isNumeric) {
+    return `<${tag}>${trimmed}</${tag}>`
+  }
   return `<${tag}>${wrapCdata(value)}</${tag}>`
 }

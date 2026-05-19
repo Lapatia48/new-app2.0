@@ -14,7 +14,11 @@ const selected = ref(null)
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
   if (normalized.includes('panier')) return 'cart'
-  if (normalized.includes('accep')) return 'paid'
+  if (normalized.includes('paiement') || normalized.includes('paiment') || normalized.includes('accep')) {
+    return 'paid'
+  }
+  if (normalized.includes('annul')) return 'cancelled'
+  if (normalized.includes('livr')) return 'delivered'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
 }
@@ -187,9 +191,19 @@ button.ghost {
   color: #35518f;
 }
 
+.badge.cancelled {
+  background: #fbe9e7;
+  color: #9b3a2f;
+}
+
 .badge.paid {
   background: #d4edda;
   color: #1f6b2f;
+}
+
+.badge.delivered {
+  background: #e6f4ea;
+  color: #246b3b;
 }
 
 .badge.error {

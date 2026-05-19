@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCartStore } from '@/services/frontoffice/cartStore'
 import { useFrontofficeSession } from '@/services/frontoffice/frontofficeSession'
+import { getXml } from '@/services/http/prestashopClient'
 import {
   buildOrderConfig,
   createOrderFromCartId,
@@ -10,6 +11,7 @@ import {
   loadCheckoutCart,
   validateOrderConfig
 } from '@/services/order/commandeAchatService'
+import { parseXml, getText } from '@/services/xml/xmlUtils'
 import CheckoutStepCustomer from './checkout/CheckoutStepCustomer.vue'
 import CheckoutStepAddress from './checkout/CheckoutStepAddress.vue'
 import CheckoutStepShipping from './checkout/CheckoutStepShipping.vue'
@@ -18,7 +20,7 @@ import CheckoutStepPayment from './checkout/CheckoutStepPayment.vue'
 const router = useRouter()
 const route = useRoute()
 const { items, total, clearCart } = useCartStore()
-const { user } = useFrontofficeSession()
+const { user, isLoggedIn } = useFrontofficeSession()
 
 const steps = [
   { id: 1, label: 'Compte' },
@@ -27,7 +29,12 @@ const steps = [
   { id: 4, label: 'Paiement' }
 ]
 
-const step = ref(1)
+function parseStep(value, fallback = 3) {
+  const parsed = Number.parseInt(String(value ?? ''), 10)
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 4 ? parsed : fallback
+}
+
+const step = ref(parseStep(route.query.step, 3))
 const address = ref('')
 const customer = ref(null)
 const submitting = ref(false)
@@ -39,29 +46,116 @@ const cartTotal = ref(0)
 const cartLoading = ref(false)
 const loadError = ref('')
 const checkoutCartId = ref(null)
+const addressSourceCustomerId = ref(null)
 
 const fromCart = computed(() => Boolean(checkoutCartId.value))
 const activeItems = computed(() => (fromCart.value ? cartItems.value : items.value))
 const activeTotal = computed(() => (fromCart.value ? cartTotal.value : total.value))
+const activeCustomer = computed(() => customer.value || user.value)
+
+function formatAddress(node) {
+  if (!node) {
+    return ''
+  }
+
+  const address1 = getText(node, 'address1')
+  const postcode = getText(node, 'postcode')
+  const city = getText(node, 'city')
+  return [address1, postcode, city].filter(Boolean).join(' ').trim()
+}
+
+async function loadCustomerAddress(customerId) {
+  const parsedCustomerId = Number.parseInt(String(customerId ?? ''), 10)
+  if (!Number.isFinite(parsedCustomerId) || parsedCustomerId <= 0) {
+    return
+  }
+
+  if (addressSourceCustomerId.value === parsedCustomerId && address.value.trim()) {
+    return
+  }
+
+  try {
+    const xml = await getXml('addresses', {
+      display: '[id,address1,postcode,city,id_customer]',
+      limit: '0,1',
+      'filter[id_customer]': parsedCustomerId
+    })
+    const doc = parseXml(xml)
+    const addressNode = doc.querySelector('address')
+    const formatted = formatAddress(addressNode)
+    if (formatted) {
+      address.value = formatted
+      addressSourceCustomerId.value = parsedCustomerId
+    }
+  } catch {
+    // Keep the current address field when the customer has no saved address.
+  }
+}
+
+function applyInitialStep(value) {
+  step.value = parseStep(value, isLoggedIn.value ? 3 : 1)
+}
 
 watch(
-  () => user.value,
+  isLoggedIn,
   (value) => {
-    if (fromCart.value) {
+    if (!value) {
+      router.replace({
+        name: 'frontoffice-users',
+        query: {
+          cartId: route.query.cartId,
+          redirect: '/frontoffice/checkout',
+          step: '3'
+        }
+      })
       return
     }
-    if (value && !customer.value) {
-      customer.value = value
-      if (step.value === 1) {
-        step.value = 2
-      }
+
+    if (!customer.value && user.value) {
+      customer.value = user.value
+    }
+
+    if (step.value < 3) {
+      step.value = 3
     }
   },
   { immediate: true }
 )
 
+watch(
+  () => user.value,
+  async (value) => {
+    if (value && !customer.value) {
+      customer.value = value
+    }
+
+    if (value?.id) {
+      await loadCustomerAddress(value.id)
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => customer.value?.id,
+  async (value) => {
+    if (value) {
+      await loadCustomerAddress(value)
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => route.query.step,
+  (value) => {
+    applyInitialStep(value)
+  },
+  { immediate: true }
+)
+
 const canSubmit = computed(() => {
-  return activeItems.value.length > 0 && address.value.trim() && (customer.value || user.value)
+  return activeItems.value.length > 0 && Boolean(activeCustomer.value)
 })
 
 function resetCartContext() {
@@ -85,11 +179,13 @@ async function loadCartFromQuery(cartId) {
     const data = await loadCheckoutCart(cartId)
     cartItems.value = data.items || []
     cartTotal.value = Number.isFinite(data.total) ? data.total : 0
-    address.value = data.addressText || ''
     if (data.customer) {
       customer.value = data.customer
     }
-    step.value = 3
+    if (data.addressText) {
+      address.value = data.addressText
+    }
+    applyInitialStep(route.query.step)
   } catch (err) {
     loadError.value = err?.message || 'Chargement du panier impossible.'
   } finally {
@@ -120,11 +216,6 @@ function prevStep() {
   step.value = Math.max(step.value - 1, 1)
 }
 
-function handleCustomer(info) {
-  customer.value = info
-  nextStep()
-}
-
 function formatDate(date) {
   const day = String(date.getDate()).padStart(2, '0')
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -149,7 +240,7 @@ async function submitOrder() {
     return
   }
 
-  const info = customer.value || user.value
+  const info = activeCustomer.value
   if (!info || !info.email) {
     error.value = 'Compte manquant.'
     return
@@ -175,9 +266,9 @@ async function submitOrder() {
       nom: name,
       email: info.email,
       pwd: '',
-      adresse: address.value.trim(),
+      adresse: address.value.trim() || 'N/A',
       achat: buildOrderItems(items.value),
-      etat: 'en attente paiement a la livraison'
+      etat: 'paiement accepte'
     }
 
     const orderId = await createOrderFromCsvRow(row, config)
@@ -220,7 +311,7 @@ function goOrders() {
     <p v-else-if="!activeItems.length" class="notice">Panier vide. Ajoutez un produit.</p>
 
     <div v-else class="step-panel">
-      <CheckoutStepCustomer v-if="step === 1" @next="handleCustomer" />
+      <CheckoutStepCustomer v-if="step === 1" @next="nextStep" />
 
       <CheckoutStepAddress
         v-else-if="step === 2"

@@ -5,6 +5,16 @@ import { createCart, readCart } from '@/services/entities/cartsService'
 import { createOrder, updateOrder } from '@/services/entities/ordersService'
 import { createOrderDetail } from '@/services/entities/orderDetailsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
+import {
+  adjustStockQuantityByProduct,
+  adjustStockQuantityByProductAttribute,
+  getStockQuantityByProduct,
+  getStockQuantityByProductAndAttribute,
+  setQuantityForProduct,
+  setQuantityForProductAttribute,
+  validateStockAvailability
+} from '@/services/entities/stockAvailablesService'
+import { recordStockMovement } from '@/services/stock/stockHistoryService'
 import { findProductInfoById, findProductInfoByReference } from '@/services/entities/productsService'
 import { findProductOptionValueIdByName } from '@/services/entities/productOptionValuesService'
 import { findCombinationByProductAndValueId, readCombination } from '@/services/entities/combinationsService'
@@ -12,7 +22,9 @@ import { getXml } from '@/services/http/prestashopClient'
 import { toFloat, toInt } from '@/services/utils/stringUtils'
 import { getText, parseXml, xmlToJson } from '@/services/xml/xmlUtils'
 
-export async function createOrderFromCsvRow(row, config) {
+export async function createOrderFromCsvRow(row, config, options = {}) {
+  const { preserveStock = false, skipStockAdjustments = false } = options || {}
+  const shouldSkipStockAdjustments = skipStockAdjustments || preserveStock
   const orderItems = parseOrderItems(row.achat)
   if (!orderItems.length) {
     throw new Error('Empty achat')
@@ -29,6 +41,13 @@ export async function createOrderFromCsvRow(row, config) {
   if (!resolvedItems.length) {
     throw new Error('No valid products')
   }
+
+  // Valider que le stock est disponible pour tous les items
+  await validateOrderItemsStock(resolvedItems)
+
+  const stockSnapshots = preserveStock
+    ? await snapshotStockLevels(resolvedItems)
+    : []
 
   const cartId = await createCartForOrder(customerId, addressId, resolvedItems, config)
   const totals = computeOrderTotals(resolvedItems)
@@ -97,6 +116,18 @@ export async function createOrderFromCsvRow(row, config) {
     })
   }
 
+  if (!shouldSkipStockAdjustments) {
+    await applyOrderStateStockEffects({
+      orderStateId,
+      items: resolvedItems,
+      config
+    })
+  }
+
+  if (preserveStock) {
+    await restoreStockLevels(stockSnapshots)
+  }
+
   return orderId
 }
 
@@ -149,8 +180,11 @@ export async function createOrderFromCartId(cartId, config) {
     throw new Error('Panier vide')
   }
 
+  // Valider que le stock est disponible pour tous les items
+  await validateOrderItemsStock(items)
+
   const totals = computeOrderTotals(items)
-  const orderStateId = config.orderStatePendingId
+  const orderStateId = config.orderStatePaidId
 
   const orderId = await createOrder({
     id_cart: cartId,
@@ -268,7 +302,9 @@ export function buildOrderConfig() {
     cashModule: (import.meta.env.VITE_CASH_MODULE || 'ps_cashondelivery').trim(),
     orderStatePendingId: toInt(import.meta.env.VITE_ORDER_STATE_PENDING_ID || '0', 0),
     orderStatePaidId: toInt(import.meta.env.VITE_ORDER_STATE_PAID_ID || '0', 0),
-    orderStateErrorId: toInt(import.meta.env.VITE_ORDER_STATE_ERROR_ID || '0', 0)
+    orderStateErrorId: toInt(import.meta.env.VITE_ORDER_STATE_ERROR_ID || '0', 0),
+    orderStateCancelledId: toInt(import.meta.env.VITE_ORDER_STATE_CANCELLED_ID || '0', 0),
+    orderStateDeliveredId: toInt(import.meta.env.VITE_ORDER_STATE_DELIVERED_ID || '0', 0)
   }
 }
 
@@ -291,8 +327,8 @@ export function validateOrderConfig(config) {
   if (!config.warehouseId) {
     throw new Error('Missing VITE_DEFAULT_WAREHOUSE_ID')
   }
-  if (!config.orderStatePendingId) {
-    throw new Error('Missing VITE_ORDER_STATE_PENDING_ID')
+  if (!config.orderStatePaidId) {
+    throw new Error('Missing VITE_ORDER_STATE_PAID_ID')
   }
 }
 
@@ -386,12 +422,14 @@ async function resolveOrderItems(items) {
       continue
     }
     let productAttributeId = 0
-    let price = info.price
+    // Prefer TTC price when available, otherwise fall back to base price
+    let price = info.priceTtc ?? info.price
     if (item.karazany) {
       const combination = await findCombinationForKarazany(info.id, item.karazany)
       if (combination) {
         productAttributeId = combination.id
-        price = info.price + combination.priceImpact
+        const base = info.priceTtc ?? info.price
+        price = base + combination.priceImpact
       } else {
         console.log(`Order: combination not found ${item.reference} ${item.karazany}`)
       }
@@ -545,7 +583,8 @@ async function resolveCartItems(cart) {
     }
 
     const priceImpact = await getCombinationPriceImpact(productAttributeId, combinationCache)
-    const price = (productInfo.price || 0) + priceImpact
+    const basePrice = productInfo.priceTtc ?? productInfo.price
+    const price = (basePrice || 0) + priceImpact
 
     items.push({
       id: productInfo.id,
@@ -594,13 +633,36 @@ async function getCombinationPriceImpact(combinationId, cache) {
 
 function resolveOrderStateId(status, config) {
   const normalized = normalizeStatus(status)
-  if (normalized.includes('accepte')) {
-    return config.orderStatePaidId
+  if (normalized.includes('annul')) {
+    if (!config.orderStateCancelledId) {
+      throw new Error('Missing VITE_ORDER_STATE_CANCELLED_ID')
+    }
+    return config.orderStateCancelledId
   }
-  if (normalized.includes('erreur')) {
+  if (normalized.includes('livr')) {
+    if (!config.orderStateDeliveredId) {
+      throw new Error('Missing VITE_ORDER_STATE_DELIVERED_ID')
+    }
+    return config.orderStateDeliveredId
+  }
+  if (normalized.includes('echec') || normalized.includes('erreur')) {
     return config.orderStateErrorId
   }
-  return config.orderStatePendingId
+  if (
+    normalized.includes('accepte') ||
+    normalized.includes('paiement') ||
+    normalized.includes('paiment') ||
+    normalized.includes('effectue')
+  ) {
+    return config.orderStatePaidId
+  }
+  if (config.orderStatePaidId) {
+    return config.orderStatePaidId
+  }
+  if (config.orderStatePendingId) {
+    return config.orderStatePendingId
+  }
+  return config.orderStateErrorId
 }
 
 function normalizeStatus(value) {
@@ -640,6 +702,93 @@ async function updateOrderDate(orderId, orderDate) {
     delete sanitized.associations
   }
   await updateOrder(orderId, { ...sanitized, date_add: orderDate, date_upd: orderDate })
+}
+
+async function applyOrderStateStockEffects({ orderStateId, items = [], config }) {
+  const deliveredId = toInt(config?.orderStateDeliveredId, 0)
+  const cancelledId = toInt(config?.orderStateCancelledId, 0)
+
+  if (!orderStateId || !items.length) {
+    return
+  }
+
+  if (orderStateId === deliveredId) {
+    await Promise.all(
+      items.map(async (item) => {
+        if (!item?.id || !item.quantity) return null
+        return recordStockMovement({
+          productId: item.id,
+          productAttributeId: item.productAttributeId || 0,
+          delta: -Math.abs(item.quantity),
+          priceTe: item.price
+        })
+      })
+    )
+  }
+
+  if (orderStateId === cancelledId) {
+    await Promise.all(
+      items.map(async (item) => {
+        if (!item?.id || !item.quantity) return null
+        if (item.productAttributeId) {
+          return adjustStockQuantityByProductAttribute(
+            item.id,
+            item.productAttributeId,
+            item.quantity
+          )
+        }
+        return adjustStockQuantityByProduct(item.id, item.quantity)
+      })
+    )
+  }
+}
+
+async function snapshotStockLevels(items = []) {
+  if (!Array.isArray(items) || !items.length) {
+    return []
+  }
+
+  const snapshots = await Promise.all(
+    items.map(async (item) => {
+      if (!item?.id) {
+        return null
+      }
+      const productAttributeId = item.productAttributeId || 0
+      const current = productAttributeId
+        ? await getStockQuantityByProductAndAttribute(item.id, productAttributeId)
+        : await getStockQuantityByProduct(item.id)
+      return {
+        productId: item.id,
+        productAttributeId,
+        currentQty: Number.isFinite(current) ? current : 0
+      }
+    })
+  )
+
+  return snapshots.filter(Boolean)
+}
+
+async function restoreStockLevels(snapshots = []) {
+  if (!Array.isArray(snapshots) || !snapshots.length) {
+    return
+  }
+
+  await Promise.all(
+    snapshots.map(async (snapshot) => {
+      if (!snapshot?.productId) {
+        return null
+      }
+      const quantity = Number.isFinite(snapshot.currentQty) ? snapshot.currentQty : 0
+      if (snapshot.productAttributeId) {
+        return setQuantityForProductAttribute(
+          snapshot.productId,
+          snapshot.productAttributeId,
+          quantity
+        )
+      }
+      return setQuantityForProduct(snapshot.productId, quantity)
+    })
+  )
 }
 
 function stripXmlAttrs(value) {
@@ -690,4 +839,26 @@ function parseOrderDate(dateStr) {
   }
 
   return `${isoDate} 00:00:00`
+}
+
+/**
+ * Valide que tous les items de la commande ont suffisamment de stock
+ * @async
+ * @param {Array<Object>} items - Les items de la commande
+ * @param {number} items[].id - ID du produit
+ * @param {number} items[].quantity - Quantité demandée
+ * @param {number} [items[].productAttributeId] - ID de l'attribut produit (optionnel)
+ * @throws {Error} Si au moins un item n'a pas suffisamment de stock
+ * @returns {Promise<void>}
+ */
+async function validateOrderItemsStock(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return
+  }
+
+  const validations = items.map((item) =>
+    validateStockAvailability(item.id, item.quantity, item.productAttributeId || 0)
+  )
+
+  await Promise.all(validations)
 }

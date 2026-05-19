@@ -1,12 +1,75 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/services/frontoffice/cartStore'
+import { useFrontofficeSession } from '@/services/frontoffice/frontofficeSession'
+import {
+  getStockQuantityByProduct,
+  getStockQuantityByProductAndAttribute
+} from '@/services/entities/stockAvailablesService'
+import { findProductInfoByReference } from '@/services/entities/productsService'
 
 const router = useRouter()
 const { items, total, updateItem, removeItem, clearCart } = useCartStore()
+const { isLoggedIn } = useFrontofficeSession()
 
+const stockAvailable = ref({})
 const hasItems = computed(() => items.value.length > 0)
+
+// Charger le stock disponible pour chaque produit
+async function loadStockForItems() {
+  const stocks = {}
+  for (const item of items.value) {
+    try {
+      let productId = item.productId
+      
+      // Si productId manquant, chercher par référence
+      if (!productId) {
+        const productInfo = await findProductInfoByReference(item.reference)
+        if (productInfo) {
+          productId = productInfo.id
+        }
+      }
+      
+      if (!productId) {
+        console.warn(`ID produit introuvable pour ${item.reference}`)
+        stocks[item.key] = 0
+        continue
+      }
+      
+      const stock = item.combinationId
+        ? await getStockQuantityByProductAndAttribute(productId, item.combinationId)
+        : await getStockQuantityByProduct(productId)
+      stocks[item.key] = stock ?? 0
+    } catch (error) {
+      console.warn(`Erreur récupération stock pour ${item.reference}:`, error)
+      stocks[item.key] = 0
+    }
+  }
+  stockAvailable.value = stocks
+}
+
+// Vérifier si un article a un stock insuffisant
+function getStockWarning(item) {
+  const available = stockAvailable.value[item.key] ?? 0
+  if (available < item.quantity) {
+    return `Stock insuffisant, plus que ${Math.max(0, available)} disponible${available > 1 ? 's' : ''}`
+  }
+  return null
+}
+
+onMounted(() => {
+  loadStockForItems()
+})
+
+// Recharger le stock quand les items changent
+watch(
+  items,
+  () => {
+    loadStockForItems()
+  },
+  { deep: true }
+)
 
 function formatMoney(value) {
   const parsed = Number.parseFloat(String(value ?? ''))
@@ -14,7 +77,15 @@ function formatMoney(value) {
 }
 
 function goCheckout() {
-  router.push('/frontoffice/checkout')
+  if (!isLoggedIn.value) {
+    router.push({
+      name: 'frontoffice-users',
+      query: { redirect: '/frontoffice/checkout', step: '3' }
+    })
+    return
+  }
+
+  router.push({ path: '/frontoffice/checkout', query: { step: '3' } })
 }
 </script>
 
@@ -59,12 +130,17 @@ function goCheckout() {
             </td>
             <td>{{ formatMoney(item.price) }}</td>
             <td>
-              <input
-                type="number"
-                min="1"
-                :value="item.quantity"
-                @change="updateItem(item.key, $event.target.value)"
-              />
+              <div>
+                <input
+                  type="number"
+                  min="1"
+                  :value="item.quantity"
+                  @change="updateItem(item.key, $event.target.value)"
+                />
+                <div v-if="getStockWarning(item)" class="stock-warning">
+                  ⚠️ {{ getStockWarning(item) }}
+                </div>
+              </div>
             </td>
             <td>{{ formatMoney(item.price * item.quantity) }}</td>
             <td>
@@ -176,6 +252,17 @@ input {
   width: 70px;
   padding: 0.3rem;
   border: 1px solid #ccc;
+}
+
+.stock-warning {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 3px;
+  color: #856404;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .summary {

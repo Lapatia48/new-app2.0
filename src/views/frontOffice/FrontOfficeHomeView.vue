@@ -332,6 +332,7 @@ function addToCart(product) {
   const price = product.price + (value?.priceImpact || 0)
 
   addItem({
+    productId: product.id,
     reference: product.reference,
     name: product.name,
     price,

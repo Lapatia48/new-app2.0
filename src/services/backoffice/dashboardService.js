@@ -1,4 +1,5 @@
 import { listGestionCommandes } from '@/services/dto/GestionCommandeDto'
+import { buildOrderConfig } from '@/services/order/commandeAchatService'
 
 function toAmount(value) {
   const normalized = String(value ?? '').replace(',', '.')
@@ -13,39 +14,55 @@ function toDateKey(value) {
   return parts[0] || 'Sans date'
 }
 
-function isFailedOrder(entry) {
+function getStateKey(entry, config) {
+  const stateId = Number.parseInt(String(entry?.summary?.currentStateId || ''), 10)
+  const paidId = Number.parseInt(String(config?.orderStatePaidId || ''), 10)
+  const deliveredId = Number.parseInt(String(config?.orderStateDeliveredId || ''), 10)
+
+  if (Number.isFinite(stateId) && stateId === paidId) {
+    return 'paid'
+  }
+  if (Number.isFinite(stateId) && stateId === deliveredId) {
+    return 'delivered'
+  }
+
   const label = String(entry?.summary?.currentStateLabel || '').toLowerCase()
-  return label.includes('echec') || label.includes('erreur')
+  if (label.includes('paiement')) return 'paid'
+  if (label.includes('livre')) return 'delivered'
+  return 'other'
+}
+
+function getStateLabel(stateKey) {
+  if (stateKey === 'paid') return 'Payée'
+  if (stateKey === 'delivered') return 'Livrée'
+  return 'Autre'
 }
 
 export async function fetchBackofficeDashboardStats() {
+  const config = buildOrderConfig()
   const list = await listGestionCommandes()
-  const orders = list.filter((entry) => !entry?.summary?.isCart && !isFailedOrder(entry))
-
-  const map = new Map()
-  let totalCount = 0
-  let totalAmount = 0
-
-  orders.forEach((entry) => {
-    const dateKey = toDateKey(entry?.summary?.date)
-    const amount = toAmount(entry?.summary?.totalPaid)
-    const current = map.get(dateKey) || { date: dateKey, count: 0, amount: 0 }
-    current.count += 1
-    current.amount += amount
-    map.set(dateKey, current)
-    totalCount += 1
-    totalAmount += amount
-  })
-
-  const days = Array.from(map.values()).sort((a, b) => {
-    if (a.date === 'Sans date') return 1
-    if (b.date === 'Sans date') return -1
-    return a.date < b.date ? 1 : -1
-  })
+  const orders = list
+    .filter((entry) => !entry?.summary?.isCart)
+    .map((entry) => {
+      const stateKey = getStateKey(entry, config)
+      const amountTtc = toAmount(entry?.summary?.totalPaidTtc || entry?.summary?.totalPaid)
+      const amountHt = toAmount(entry?.summary?.totalPaidHt)
+      return {
+        id: Number.parseInt(String(entry?.summary?.id || ''), 10) || 0,
+        orderId: Number.parseInt(String(entry?.summary?.orderId || ''), 10) || 0,
+        date: toDateKey(entry?.summary?.date),
+        amount: amountTtc,
+        amountTtc,
+        amountHt,
+        stateKey,
+        stateLabel: getStateLabel(stateKey),
+        customerName: entry?.summary?.customerName || '',
+        source: entry
+      }
+    })
+    .filter((entry) => entry.stateKey === 'paid' || entry.stateKey === 'delivered')
 
   return {
-    days,
-    totalCount,
-    totalAmount
+    orders
   }
 }

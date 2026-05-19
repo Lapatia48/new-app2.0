@@ -4,20 +4,29 @@ import { fetchBackofficeDashboardStats } from '@/services/backoffice/dashboardSe
 
 const loading = ref(false)
 const error = ref('')
-const daily = ref([])
-const totalCount = ref(0)
-const totalAmount = ref(0)
+const orders = ref([])
 
 const dateQuery = ref('')
 const rangeStart = ref('')
 const rangeEnd = ref('')
+const stateFilter = ref('all')
 
-const filteredDaily = computed(() => {
+const stateOptions = [
+  { value: 'all', label: 'Tous les états' },
+  { value: 'paid', label: 'Payées' },
+  { value: 'delivered', label: 'Livrées' }
+]
+
+const filteredOrders = computed(() => {
+  const state = stateFilter.value
   const query = dateQuery.value
   const start = rangeStart.value
   const end = rangeEnd.value
 
-  return daily.value.filter((entry) => {
+  return orders.value.filter((entry) => {
+    if (state !== 'all' && entry.stateKey !== state) {
+      return false
+    }
     if (entry.date === 'Sans date') {
       return !query && !start && !end
     }
@@ -34,17 +43,53 @@ const filteredDaily = computed(() => {
   })
 })
 
-const filteredTotalCount = computed(() =>
-  filteredDaily.value.reduce((sum, entry) => sum + entry.count, 0)
+const sortedFilteredOrders = computed(() =>
+  [...filteredOrders.value].sort((a, b) => {
+    if (a.date === 'Sans date') return 1
+    if (b.date === 'Sans date') return -1
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1
+    return (b.orderId || b.id || 0) - (a.orderId || a.id || 0)
+  })
+)
+
+const dailyEntries = computed(() => {
+  const map = new Map()
+
+  sortedFilteredOrders.value.forEach((entry) => {
+    const current = map.get(entry.date) || { date: entry.date, count: 0, amount: 0 }
+    current.count += 1
+    current.amount += entry.amount
+    map.set(entry.date, current)
+  })
+
+  return Array.from(map.values()).sort((a, b) => {
+    if (a.date === 'Sans date') return 1
+    if (b.date === 'Sans date') return -1
+    return a.date < b.date ? 1 : -1
+  })
+})
+
+const filteredTotalCount = computed(() => filteredOrders.value.length)
+
+const paidCount = computed(() =>
+  filteredOrders.value.filter((entry) => entry.stateKey === 'paid').length
+)
+
+const deliveredCount = computed(() =>
+  filteredOrders.value.filter((entry) => entry.stateKey === 'delivered').length
 )
 
 const filteredTotalAmount = computed(() =>
-  filteredDaily.value.reduce((sum, entry) => sum + entry.amount, 0)
+  filteredOrders.value.reduce((sum, entry) => sum + entry.amountTtc, 0)
+)
+
+const filteredTotalAmountHt = computed(() =>
+  filteredOrders.value.reduce((sum, entry) => sum + entry.amountHt, 0)
 )
 
 const maxCount = computed(() => {
-  if (!filteredDaily.value.length) return 0
-  return Math.max(...filteredDaily.value.map((entry) => entry.count))
+  if (!dailyEntries.value.length) return 0
+  return Math.max(...dailyEntries.value.map((entry) => entry.count))
 })
 
 const rainbowPalette = [
@@ -68,10 +113,15 @@ function formatMoney(value) {
   return Number(value || 0).toFixed(2)
 }
 
+function stateLabel(stateKey) {
+  return stateKey === 'paid' ? 'Payée' : 'Livrée'
+}
+
 function resetFilters() {
   dateQuery.value = ''
   rangeStart.value = ''
   rangeEnd.value = ''
+  stateFilter.value = 'all'
 }
 
 async function loadDashboard() {
@@ -79,9 +129,7 @@ async function loadDashboard() {
   error.value = ''
   try {
     const data = await fetchBackofficeDashboardStats()
-    daily.value = data.days
-    totalCount.value = data.totalCount
-    totalAmount.value = data.totalAmount
+    orders.value = data.orders || []
   } catch (err) {
     error.value = err?.message || 'Erreur lors du chargement du tableau de bord.'
   } finally {
@@ -100,7 +148,7 @@ onMounted(() => {
       <div>
         <p class="eyebrow">Backoffice</p>
         <h1>Tableau de bord</h1>
-        <p class="subtitle">Synthese des commandes par jour.</p>
+        <p class="subtitle">Synthese des commandes payees et livrees, avec filtre par etat.</p>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost" :disabled="loading" @click="loadDashboard">
@@ -114,6 +162,14 @@ onMounted(() => {
 
     <div v-else class="content">
       <div class="filters">
+        <label class="filter">
+          Etat
+          <select v-model="stateFilter">
+            <option v-for="option in stateOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
         <label class="filter">
           Date exacte
           <input v-model="dateQuery" type="date" />
@@ -135,8 +191,20 @@ onMounted(() => {
           <p class="value">{{ filteredTotalCount }}</p>
         </article>
         <article class="summary-card">
-          <p class="label">Montant total</p>
+          <p class="label">Commandes payees</p>
+          <p class="value">{{ paidCount }}</p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Commandes livrees</p>
+          <p class="value">{{ deliveredCount }}</p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Montant total TTC</p>
           <p class="value">{{ formatMoney(filteredTotalAmount) }}</p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Montant total HT</p>
+          <p class="value">{{ formatMoney(filteredTotalAmountHt) }}</p>
         </article>
       </div>
 
@@ -145,10 +213,10 @@ onMounted(() => {
           <h2>Commandes par jour</h2>
           <p class="muted">Histogramme (nb de commandes)</p>
         </div>
-        <div v-if="!filteredDaily.length" class="empty">Aucune commande.</div>
+        <div v-if="!dailyEntries.length" class="empty">Aucune commande.</div>
         <div v-else class="bars-scroll">
           <div class="bars">
-            <div v-for="(entry, index) in filteredDaily" :key="entry.date" class="bar">
+            <div v-for="(entry, index) in dailyEntries" :key="entry.date" class="bar">
               <div
                 class="bar-fill"
                 :style="{
@@ -164,19 +232,43 @@ onMounted(() => {
       </div>
 
       <div class="table-card">
-        <table class="table">
+        <div class="table-header">
+          <div>
+            <h2>Detail des commandes</h2>
+            <p class="muted">Etat, client, date et montant de chaque commande.</p>
+          </div>
+          <div class="legend">
+            <span class="legend-item paid">Payee</span>
+            <span class="legend-item delivered">Livree</span>
+          </div>
+        </div>
+
+        <div v-if="!sortedFilteredOrders.length" class="empty">Aucune commande.</div>
+
+        <table v-else class="table">
           <thead>
             <tr>
-              <th>Jour</th>
-              <th>Nb commandes</th>
-              <th>Montant</th>
+              <th>Commande</th>
+              <th>Client</th>
+              <th>Date</th>
+              <th>Etat</th>
+              <th>Montant TTC</th>
+              <th>Montant HT</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="entry in filteredDaily" :key="entry.date">
+            <tr
+              v-for="entry in sortedFilteredOrders"
+              :key="`${entry.orderId || entry.id}-${entry.date}`"
+            >
+              <td>Commande #{{ entry.orderId || entry.id }}</td>
+              <td>{{ entry.customerName || '-' }}</td>
               <td>{{ entry.date }}</td>
-              <td class="mono">{{ entry.count }}</td>
-              <td class="mono">{{ formatMoney(entry.amount) }}</td>
+              <td>
+                <span class="state" :class="entry.stateKey">{{ stateLabel(entry.stateKey) }}</span>
+              </td>
+              <td class="mono">{{ formatMoney(entry.amountTtc) }}</td>
+              <td class="mono">{{ formatMoney(entry.amountHt) }}</td>
             </tr>
           </tbody>
         </table>
@@ -281,7 +373,8 @@ onMounted(() => {
   color: var(--muted);
 }
 
-input {
+input,
+select {
   padding: 0.45rem 0.6rem;
   border: 1px solid #d9d0c5;
   border-radius: 10px;
@@ -322,6 +415,37 @@ input {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 1rem;
+}
+
+.table-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.legend-item {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #f2efe8;
+  font-size: 0.8rem;
+}
+
+.legend-item.paid {
+  background: #e6f4ea;
+  color: #246b3b;
+}
+
+.legend-item.delivered {
+  background: #eaf2ff;
+  color: #24518f;
 }
 
 .chart-header {
@@ -412,6 +536,25 @@ input {
   text-align: left;
   padding: 0.6rem 0.4rem;
   border-bottom: 1px solid #eee;
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.state.paid {
+  background: #e6f4ea;
+  color: #246b3b;
+}
+
+.state.delivered {
+  background: #eaf2ff;
+  color: #24518f;
 }
 
 .empty {

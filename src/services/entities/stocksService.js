@@ -21,8 +21,8 @@ function parseStockNode(node) {
   }
 }
 
-export async function listStocks(limit = 200) {
-  const cappedLimit = Math.min(Math.max(limit, 1), 1000)
+export async function listStocks(limit = 10000) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 10000)
   const xml = await getXml('stocks', {
     display: '[id,id_warehouse,id_product,id_product_attribute,reference,price_te]',
     limit: `0,${cappedLimit}`
@@ -80,18 +80,24 @@ export async function createStockEntry({
     isbn,
     upc,
     mpn,
+    // Ensure integer quantities are sent to the API (no decimals, no empty values)
     physical_quantity: toInt(physicalQuantity, 0),
     usable_quantity: toInt(usableQuantity, 0),
     price_te: toFloat(String(priceTe ?? '0'), 0)
   }
 
   const xml = buildEntityXml('stock', payload)
-  const responseXml = await postXml('stocks', xml)
-  const id = getIdFromXml(responseXml, 'stock')
-  if (!id) {
-    throw new Error('Missing stock id in response')
+  try {
+    const responseXml = await postXml('stocks', xml)
+    const id = getIdFromXml(responseXml, 'stock')
+    if (!id) {
+      throw new Error('Missing stock id in response')
+    }
+    return id
+  } catch (error) {
+    // Re-throw with context to help troubleshooting validation errors from PrestaShop
+    throw new Error(`Failed to create stock entry (productId=${idProduct}, attribute=${idAttribute}): ${error?.message || error}`)
   }
-  return id
 }
 
 export async function findStockEntry({ productId, productAttributeId = 0, warehouseId } = {}) {
@@ -125,7 +131,7 @@ export async function findStockEntry({ productId, productAttributeId = 0, wareho
 
   const fallbackXml = await getXml('stocks', {
     display: '[id,id_warehouse,id_product,id_product_attribute,price_te]',
-    limit: '0,1000'
+    limit: '0,10000'
   })
   const fallbackDoc = parseXml(fallbackXml)
   const nodes = Array.from(fallbackDoc.querySelectorAll('stock'))

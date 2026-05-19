@@ -57,6 +57,7 @@ function normalizeItem(item) {
   const name = String(item.name || '').trim() || reference
   const specificite = String(item.specificite || '').trim()
   const karazany = String(item.karazany || '').trim()
+  const productId = Number.isFinite(Number(item.productId)) ? Number(item.productId) : null
   const combinationId = Number.isFinite(Number(item.combinationId))
     ? Number(item.combinationId)
     : null
@@ -73,6 +74,7 @@ function normalizeItem(item) {
     imageUrl: item.imageUrl || null,
     specificite: specificite || null,
     karazany: karazany || null,
+    productId,
     combinationId,
     specificiteId,
     valueId

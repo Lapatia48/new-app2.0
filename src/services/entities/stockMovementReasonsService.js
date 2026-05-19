@@ -2,10 +2,10 @@ import { getXml } from '@/services/http/prestashopClient'
 import { parseXml, getText } from '@/services/xml/xmlUtils'
 import { toInt } from '@/services/utils/stringUtils'
 
-export async function listStockMovementReasons({ sign, limit = 20 } = {}) {
+export async function listStockMovementReasons({ sign, limit = 10000 } = {}) {
   const query = {
     display: '[id,sign,name]',
-    limit: `0,${limit}`
+    limit: `0,${Math.min(Math.max(limit, 1), 10000)}`
   }
 
   if (typeof sign === 'number') {

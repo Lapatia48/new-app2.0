@@ -5,6 +5,7 @@ import {
   changeOrderState,
   getStateOptions
 } from '@/services/dto/GestionCommandeDto'
+import { buildOrderConfig } from '@/services/order/commandeAchatService'
 import { enrichRowsWithProductImages } from '@/services/entities/imagesService'
 
 const props = defineProps({ entry: { type: Object, required: false } })
@@ -17,6 +18,12 @@ const saving = ref(false)
 const error = ref('')
 const states = ref(getStateOptions())
 const selectedState = ref(null)
+const orderConfig = buildOrderConfig()
+const paidStateId = Number.parseInt(String(orderConfig.orderStatePaidId || '0'), 10) || 0
+const cancelledStateId =
+  Number.parseInt(String(orderConfig.orderStateCancelledId || '0'), 10) || 0
+const deliveredStateId =
+  Number.parseInt(String(orderConfig.orderStateDeliveredId || '0'), 10) || 0
 
 const summary = computed(() => dto.value?.summary || props.entry?.summary || {})
 const isCart = computed(() => summary.value?.isCart)
@@ -71,6 +78,12 @@ async function loadDetails() {
 async function saveSelectedState() {
   if (!props.entry || !props.entry.id) return
   if (!selectedState.value) return
+  const nextId = Number.parseInt(String(selectedState.value), 10) || 0
+  const currentId = Number.parseInt(String(dto.value?.summary?.currentStateId || summary.value?.currentStateId || 0), 10) || 0
+  if ((nextId === cancelledStateId || nextId === deliveredStateId) && currentId !== paidStateId) {
+    error.value = "Seul l'etat paiement accepte peut etre annule ou livre."
+    return
+  }
   saving.value = true
   error.value = ''
   try {
@@ -108,7 +121,11 @@ function formatAddress(address) {
 function stateClass(label) {
   const normalized = String(label || '').toLowerCase()
   if (normalized.includes('panier')) return 'cart'
-  if (normalized.includes('accep')) return 'paid'
+  if (normalized.includes('paiement') || normalized.includes('paiment') || normalized.includes('accep')) {
+    return 'paid'
+  }
+  if (normalized.includes('annul')) return 'cancelled'
+  if (normalized.includes('livr')) return 'delivered'
   if (normalized.includes('echec') || normalized.includes('erreur')) return 'error'
   return 'pending'
 }
@@ -139,7 +156,7 @@ function close() {
 
         <div class="state-card">
           <div>
-            <p class="label">Etat de paiement</p>
+            <p class="label">Etat commande</p>
             <span class="badge" :class="stateClass(summary.currentStateLabel)">
               {{ summary.currentStateLabel || '-' }}
             </span>
@@ -174,7 +191,8 @@ function close() {
             <h3>Resume</h3>
             <p>Commande #{{ summary.id || '-' }}</p>
             <p>Date: {{ summary.date || '-' }}</p>
-            <p>Total: {{ summary.totalPaid || '-' }}</p>
+            <p>Total TTC: {{ summary.totalPaidTtc || summary.totalPaid || '-' }}</p>
+            <p>Total HT: {{ summary.totalPaidHt || summary.totalPaid || '-' }}</p>
           </div>
         </div>
 
@@ -196,9 +214,11 @@ function close() {
                 <div class="item-title">{{ it.name || '-' }}</div>
                 <div class="item-meta">Ref: {{ it.reference }}</div>
                 <div class="item-meta">Qte: {{ it.quantity }}</div>
-                <div class="item-price">{{ it.price }}</div>
+                <div class="item-price">TTC {{ it.priceTtc || it.price }}</div>
+                <div class="item-price">HT {{ it.priceHt || it.price }}</div>
               </div>
-              <div class="item-total">Total {{ it.total }}</div>
+              <div class="item-total">Total TTC {{ it.totalTtc || it.total }}</div>
+              <div class="item-total">Total HT {{ it.totalHt || it.total }}</div>
             </article>
           </div>
         </div>
@@ -358,6 +378,11 @@ select {
   color: #35518f;
 }
 
+.badge.cancelled {
+  background: #fbe9e7;
+  color: #9b3a2f;
+}
+
 .hint {
   margin: 0.35rem 0 0;
   color: var(--muted);
@@ -367,6 +392,11 @@ select {
 .badge.paid {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.badge.delivered {
+  background: #e6f4ea;
+  color: #246b3b;
 }
 
 .badge.error {

@@ -1,12 +1,17 @@
-import { getXml, buildApiUrl } from '@/services/http/prestashopClient'
+import { getXml, buildApiUrl, postFrontForm } from '@/services/http/prestashopClient'
 import { xmlToJson, parseXml, extractIdsByTag } from '@/services/xml/xmlUtils'
 import { listOrderIds } from '@/services/entities/ordersService'
 import { listCartIds } from '@/services/entities/cartsService'
 import { readCombination } from '@/services/entities/combinationsService'
 import { findProductInfoById } from '@/services/entities/productsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
-import { buildOrderConfig } from '@/services/order/commandeAchatService'
+import { getProductPricing } from '@/services/pricing/productPricingService'
+import {
+  adjustStockQuantityByProduct,
+  adjustStockQuantityByProductAttribute
+} from '@/services/entities/stockAvailablesService'
 import { recordStockMovement } from '@/services/stock/stockHistoryService'
+import { buildOrderConfig } from '@/services/order/commandeAchatService'
 
 const EMPTY_LABEL = '-'
 const CART_LABEL = 'dans le panier'
@@ -53,9 +58,121 @@ function formatMoney(value) {
   return toFloat(value, 0).toFixed(2)
 }
 
+function toCents(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100)
+}
+
+function fromCents(value) {
+  return Number.isFinite(value) ? value / 100 : 0
+}
+
+async function enrichRowsWithPricing(rows) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return []
+  }
+
+  const cache = new Map()
+
+  const priced = await Promise.all(
+    rows.map(async (row) => {
+      const productId = toNumber(row?.productId, 0)
+      const productAttributeId = toNumber(row?.productAttributeId, 0)
+      if (!productId) {
+        const fallbackPrice = toFloat(row?.price, 0)
+        const fallbackTotal = toFloat(row?.total, fallbackPrice * toNumber(row?.quantity, 0))
+        const fallbackPriceCents = toCents(fallbackPrice)
+        const fallbackTotalCents = toCents(fallbackTotal)
+        return {
+          ...row,
+          priceTtcValue: fromCents(fallbackPriceCents),
+          priceHtValue: fromCents(fallbackPriceCents),
+          totalTtcValue: fromCents(fallbackTotalCents),
+          totalHtValue: fromCents(fallbackTotalCents),
+          priceTtc: formatMoney(fromCents(fallbackPriceCents)),
+          priceHt: formatMoney(fromCents(fallbackPriceCents)),
+          totalTtc: formatMoney(fromCents(fallbackTotalCents)),
+          totalHt: formatMoney(fromCents(fallbackTotalCents)),
+          taxRate: 0
+        }
+      }
+
+      const cacheKey = `${productId}:${productAttributeId}`
+      let pricing = cache.get(cacheKey)
+      if (!pricing) {
+        pricing = await getProductPricing(productId, productAttributeId)
+        cache.set(cacheKey, pricing || null)
+      }
+
+      if (!pricing) {
+        const fallbackPrice = toFloat(row?.price, 0)
+        const fallbackTotal = toFloat(row?.total, fallbackPrice * toNumber(row?.quantity, 0))
+        const fallbackPriceCents = toCents(fallbackPrice)
+        const fallbackTotalCents = toCents(fallbackTotal)
+        return {
+          ...row,
+          priceTtcValue: fromCents(fallbackPriceCents),
+          priceHtValue: fromCents(fallbackPriceCents),
+          totalTtcValue: fromCents(fallbackTotalCents),
+          totalHtValue: fromCents(fallbackTotalCents),
+          priceTtc: formatMoney(fromCents(fallbackPriceCents)),
+          priceHt: formatMoney(fromCents(fallbackPriceCents)),
+          totalTtc: formatMoney(fromCents(fallbackTotalCents)),
+          totalHt: formatMoney(fromCents(fallbackTotalCents)),
+          taxRate: 0
+        }
+      }
+
+      const quantity = toNumber(row?.quantity, 0)
+      const unitTtc = pricing.priceTtc || 0
+      const unitTtcCents = toCents(unitTtc)
+      const totalTtcCents = toCents(unitTtc * quantity)
+      const divisor = 1 + (pricing.taxRate || 0) / 100
+      const unitHtCents = divisor ? Math.round(unitTtcCents / divisor) : unitTtcCents
+      const totalHtCents = divisor ? Math.round(totalTtcCents / divisor) : totalTtcCents
+      const unitHt = fromCents(unitHtCents)
+      const totalTtc = fromCents(totalTtcCents)
+      const totalHt = fromCents(totalHtCents)
+
+      return {
+        ...row,
+        priceTtcValue: fromCents(unitTtcCents),
+        priceHtValue: unitHt,
+        totalTtcValue: totalTtc,
+        totalHtValue: totalHt,
+        priceTtc: formatMoney(fromCents(unitTtcCents)),
+        priceHt: formatMoney(unitHt),
+        totalTtc: formatMoney(totalTtc),
+        totalHt: formatMoney(totalHt),
+        taxRate: pricing.taxRate
+      }
+    })
+  )
+
+  return priced
+}
+
+function computePricingTotals(rows) {
+  return rows.reduce(
+    (acc, row) => {
+      const totalTtc = Number.isFinite(row?.totalTtcValue)
+        ? row.totalTtcValue
+        : toFloat(row?.totalTtc, 0)
+      const totalHt = Number.isFinite(row?.totalHtValue)
+        ? row.totalHtValue
+        : toFloat(row?.totalHt, 0)
+      acc.totalTtc += totalTtc
+      acc.totalHt += totalHt
+      return acc
+    },
+    { totalTtc: 0, totalHt: 0 }
+  )
+}
+
 function formatStateLabel(stateId, config) {
   const id = toNumber(stateId, 0)
-  if (id && id === toNumber(config.orderStatePaidId, 0)) return 'acceptee'
+  if (id && id === toNumber(config.orderStatePaidId, 0)) return 'paiement accepte'
+  if (id && id === toNumber(config.orderStateDeliveredId, 0)) return 'livre'
+  if (id && id === toNumber(config.orderStateCancelledId, 0)) return 'annule'
   if (id && id === toNumber(config.orderStateErrorId, 0)) return 'echec'
   return 'en attente'
 }
@@ -307,6 +424,11 @@ export async function buildGestionCommandeDto(orderId) {
     fetchOrderRows(order)
   ])
 
+  const pricedRows = await enrichRowsWithPricing(rows)
+  const pricingTotals = computePricingTotals(pricedRows)
+  const totalPaidTtc = pricingTotals.totalTtc || toFloat(pickText(order.total_paid_real, order.total_paid, 0), 0)
+  const totalPaidHt = pricingTotals.totalHt || 0
+
   const config = buildOrderConfig()
   const currentStateId = toNumber(order.current_state, 0)
   const dateValue = pickText(order.date_add, order.invoice_date) || EMPTY_LABEL
@@ -319,14 +441,16 @@ export async function buildGestionCommandeDto(orderId) {
     cart,
     addressDelivery,
     addressInvoice,
-    rows,
+    rows: pricedRows,
     summary: {
       id: resolvedOrderId,
       orderId: resolvedOrderId,
       cartId: resolvedCartId || 0,
       date: dateValue,
       customerName: getCustomerDisplayName(customer),
-      totalPaid: formatMoney(pickText(order.total_paid_real, order.total_paid, 0)),
+      totalPaid: formatMoney(totalPaidTtc),
+      totalPaidTtc: formatMoney(totalPaidTtc),
+      totalPaidHt: formatMoney(totalPaidHt),
       currentStateId,
       currentStateLabel: formatStateLabel(currentStateId, config),
       isCart: false
@@ -361,7 +485,10 @@ export async function buildGestionPanierDto(cartId) {
 
   const dateValue = pickText(cart.date_add, cart.date_upd) || EMPTY_LABEL
   const resolvedCartId = toNumber(cart.id, cartId)
-  const totalValue = computeRowsTotal(rows)
+  const pricedRows = await enrichRowsWithPricing(rows)
+  const pricingTotals = computePricingTotals(pricedRows)
+  const totalValue = pricingTotals.totalTtc || computeRowsTotal(rows)
+  const totalHtValue = pricingTotals.totalHt || 0
 
   return {
     order: null,
@@ -369,7 +496,7 @@ export async function buildGestionPanierDto(cartId) {
     customer,
     addressDelivery,
     addressInvoice,
-    rows,
+    rows: pricedRows,
     summary: {
       id: resolvedCartId,
       orderId: null,
@@ -377,6 +504,8 @@ export async function buildGestionPanierDto(cartId) {
       date: dateValue,
       customerName: getCustomerDisplayName(customer),
       totalPaid: formatMoney(totalValue),
+      totalPaidTtc: formatMoney(totalValue),
+      totalPaidHt: formatMoney(totalHtValue),
       currentStateId: 0,
       currentStateLabel: CART_LABEL,
       isCart: true
@@ -502,55 +631,110 @@ async function listCartIdsByCustomer(customerId) {
 export function getStateOptions() {
   const config = buildOrderConfig()
   return [
-    { id: toNumber(config.orderStatePendingId, 0), label: 'en attente' },
-    { id: toNumber(config.orderStatePaidId, 0), label: 'acceptee' },
-    { id: toNumber(config.orderStateErrorId, 0), label: 'echec' }
+    { id: toNumber(config.orderStatePaidId, 0), label: 'paiement accepte' },
+    { id: toNumber(config.orderStateCancelledId, 0), label: 'annule' },
+    { id: toNumber(config.orderStateDeliveredId, 0), label: 'livre' }
   ].filter((s) => s.id)
 }
 
 export async function changeOrderState(orderId, stateId, options = {}) {
   if (!orderId) throw new Error('Missing orderId')
   if (!stateId) throw new Error('Missing stateId')
-  await createOrderHistory({
-    id_order: String(orderId),
-    id_order_state: String(stateId)
-  })
 
   const config = buildOrderConfig()
-  const pendingId = toNumber(config.orderStatePendingId, 0)
   const paidId = toNumber(config.orderStatePaidId, 0)
-  const previousId = toNumber(options.previousStateId, 0)
+  const cancelledId = toNumber(config.orderStateCancelledId, 0)
+  const deliveredId = toNumber(config.orderStateDeliveredId, 0)
   const nextId = toNumber(stateId, 0)
 
-  if (pendingId && paidId && previousId === pendingId && nextId === paidId) {
-    let rows = Array.isArray(options.rows) ? options.rows : []
-    if (!rows.length) {
-      try {
-        const dto = await buildGestionCommandeDto(orderId)
-        rows = Array.isArray(dto?.rows) ? dto.rows : []
-      } catch (error) {
-        rows = []
-      }
-    }
+  let previousId = toNumber(options.previousStateId, 0)
+  let rows = Array.isArray(options.rows) ? options.rows : []
 
-    if (rows.length) {
-      await Promise.all(
-        rows.map(async (row) => {
-          const productId = toNumber(row?.productId, 0)
-          if (!productId) return null
-          const productAttributeId = toNumber(row?.productAttributeId, 0)
-          const qty = toNumber(row?.quantity, 0)
-          if (!qty) return null
-          const priceTe = toFloat(row?.price, 0)
-          return recordStockMovement({
-            productId,
-            productAttributeId,
-            delta: -Math.abs(qty),
-            priceTe
-          })
-        })
-      )
+  if (!previousId || !rows.length) {
+    try {
+      const dto = await buildGestionCommandeDto(orderId)
+      previousId = previousId || toNumber(dto?.summary?.currentStateId, 0)
+      if (!rows.length) {
+        rows = Array.isArray(dto?.rows) ? dto.rows : []
+      }
+    } catch (error) {
+      // Keep fallback values.
     }
+  }
+
+  if ((nextId === cancelledId || nextId === deliveredId) && previousId !== paidId) {
+    throw new Error("Transition invalide. Seul l'etat paiement accepte peut etre annule ou livre.")
+  }
+
+  const useManualEndpoint = nextId === cancelledId || nextId === deliveredId
+  if (useManualEndpoint) {
+    try {
+      await postFrontForm('module/manualorderstate/shiporder', {
+        id_order: String(orderId),
+        id_order_state: String(nextId)
+      })
+      return
+    } catch (error) {
+      // If the custom front endpoint fails (500), fall back to using the webservice
+      // history endpoint so the state still changes. Surface a clearer error when
+      // both approaches fail.
+      console.error('manualorderstate front API failed:', error?.message || error)
+      try {
+        await createOrderHistory({
+          id_order: String(orderId),
+          id_order_state: String(stateId)
+        })
+      } catch (err2) {
+        throw new Error(
+          `manualorderstate failed: ${error?.message || error}. fallback createOrderHistory failed: ${err2?.message || err2}`
+        )
+      }
+      // continue execution so stock adjustments occur below
+    }
+  } else {
+    await createOrderHistory({
+      id_order: String(orderId),
+      id_order_state: String(stateId)
+    })
+  }
+
+  if (!rows.length || !paidId) {
+    return
+  }
+
+  if (previousId === paidId && nextId === deliveredId) {
+    await Promise.all(
+      rows.map(async (row) => {
+        const productId = toNumber(row?.productId, 0)
+        if (!productId) return null
+        const productAttributeId = toNumber(row?.productAttributeId, 0)
+        const qty = toNumber(row?.quantity, 0)
+        if (!qty) return null
+        const priceTe = toFloat(row?.price, 0)
+        return recordStockMovement({
+          productId,
+          productAttributeId,
+          delta: -Math.abs(qty),
+          priceTe
+        })
+      })
+    )
+  }
+
+  if (previousId === paidId && nextId === cancelledId) {
+    await Promise.all(
+      rows.map(async (row) => {
+        const productId = toNumber(row?.productId, 0)
+        if (!productId) return null
+        const productAttributeId = toNumber(row?.productAttributeId, 0)
+        const qty = toNumber(row?.quantity, 0)
+        if (!qty) return null
+        if (productAttributeId) {
+          return adjustStockQuantityByProductAttribute(productId, productAttributeId, qty)
+        }
+        return adjustStockQuantityByProduct(productId, qty)
+      })
+    )
   }
 }
 

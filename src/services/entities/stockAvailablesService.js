@@ -7,6 +7,25 @@ export function listStockAvailableIds() {
   return fetchAllIds('stock_availables', 'stock_available')
 }
 
+export async function listStockAvailableEntries(limit = 10000) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 10000)
+  const xml = await getXml('stock_availables', {
+    display: '[id_product,id_product_attribute,quantity]',
+    limit: `0,${cappedLimit}`
+  })
+  const doc = parseXml(xml)
+  const nodes = Array.from(doc.querySelectorAll('stock_available'))
+  return nodes
+    .map((node) => {
+      const productId = toInt(getText(node, 'id_product'), 0)
+      const productAttributeId = toInt(getText(node, 'id_product_attribute'), 0)
+      const quantity = toInt(getText(node, 'quantity'), 0)
+      if (!productId) return null
+      return { productId, productAttributeId, quantity }
+    })
+    .filter(Boolean)
+}
+
 export async function readStockAvailable(id) {
   const xml = await getXml(`stock_availables/${id}`)
   return xmlToJson(xml)
@@ -110,6 +129,24 @@ export async function setQuantityForProductAttribute(productId, productAttribute
   await setStockQuantityById(stockId, quantity)
 }
 
+export async function adjustStockQuantityByProduct(productId, delta) {
+  const current = (await getStockQuantityByProduct(productId)) ?? 0
+  const nextQty = current + Number(delta || 0)
+  await setQuantityForProduct(productId, Math.max(0, nextQty))
+  return { previousQty: current, nextQty: Math.max(0, nextQty) }
+}
+
+export async function adjustStockQuantityByProductAttribute(
+  productId,
+  productAttributeId,
+  delta
+) {
+  const current = (await getStockQuantityByProductAndAttribute(productId, productAttributeId)) ?? 0
+  const nextQty = current + Number(delta || 0)
+  await setQuantityForProductAttribute(productId, productAttributeId, Math.max(0, nextQty))
+  return { previousQty: current, nextQty: Math.max(0, nextQty) }
+}
+
 function getQuantityFromDoc(doc) {
   const node = doc.querySelector('stock_available')
   if (!node) {
@@ -144,6 +181,36 @@ export async function getStockQuantityByProductAndAttribute(productId, productAt
   })
   const doc = parseXml(xml)
   return getQuantityFromDoc(doc)
+}
+
+/**
+ * Valide que la quantité demandée est disponible en stock
+ * @param {number} productId - ID du produit
+ * @param {number} requestedQuantity - Quantité demandée
+ * @param {number} [productAttributeId] - ID de l'attribut produit (optionnel)
+ * @throws {Error} Si le stock est insuffisant
+ * @returns {Promise<boolean>} true si le stock est suffisant
+ */
+export async function validateStockAvailability(productId, requestedQuantity, productAttributeId = 0) {
+  const normalizedQty = Number.parseInt(String(requestedQuantity ?? 0), 10)
+  
+  if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+    throw new Error('Quantité invalide')
+  }
+  
+  const availableStock = productAttributeId
+    ? await getStockQuantityByProductAndAttribute(productId, productAttributeId)
+    : await getStockQuantityByProduct(productId)
+  
+  const stockQty = availableStock ?? 0
+  
+  if (stockQty < normalizedQty) {
+    throw new Error(
+      `Stock insuffisant. Disponible: ${Math.max(0, stockQty)}, Demandé: ${normalizedQty}`
+    )
+  }
+  
+  return true
 }
 
 function getText(node, selector, fallback = '') {
