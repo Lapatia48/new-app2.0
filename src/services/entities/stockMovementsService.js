@@ -65,11 +65,11 @@ export async function listStockMovements({
   date,
   fromDate,
   toDate,
-  limit = 200
+  limit = 10000
 } = {}) {
   const query = {
     display: 'full',
-    limit: `0,${limit}`
+    limit: `0,${Math.min(Math.max(limit, 1), 10000)}`
   }
 
   if (stockId) {

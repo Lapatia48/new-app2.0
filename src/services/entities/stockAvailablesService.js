@@ -7,8 +7,8 @@ export function listStockAvailableIds() {
   return fetchAllIds('stock_availables', 'stock_available')
 }
 
-export async function listStockAvailableEntries(limit = 1000) {
-  const cappedLimit = Math.min(Math.max(limit, 1), 2000)
+export async function listStockAvailableEntries(limit = 10000) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 10000)
   const xml = await getXml('stock_availables', {
     display: '[id_product,id_product_attribute,quantity]',
     limit: `0,${cappedLimit}`

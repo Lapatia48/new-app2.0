@@ -8,8 +8,8 @@ export function listProductIds() {
   return fetchAllIds('products', 'product')
 }
 
-export async function listProducts(limit = 200) {
-  const cappedLimit = Math.min(Math.max(limit, 1), 1000)
+export async function listProducts(limit = 10000) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 10000)
   const xml = await getXml('products', {
     display: '[id,reference,name]',
     limit: `0,${cappedLimit}`
@@ -139,13 +139,13 @@ function parseProductSearchResults(xml) {
     .filter(Boolean)
 }
 
-export async function searchProducts(query, limit = 12) {
+export async function searchProducts(query, limit = 10000) {
   const term = String(query || '').trim()
   if (!term) {
     return []
   }
 
-  const cappedLimit = Math.min(Math.max(limit, 1), 50)
+  const cappedLimit = Math.min(Math.max(limit, 1), 10000)
   const display = '[id,reference,name]'
   const likeTerm = `%${term}%`
 

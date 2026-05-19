@@ -21,8 +21,8 @@ function parseStockNode(node) {
   }
 }
 
-export async function listStocks(limit = 200) {
-  const cappedLimit = Math.min(Math.max(limit, 1), 1000)
+export async function listStocks(limit = 10000) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 10000)
   const xml = await getXml('stocks', {
     display: '[id,id_warehouse,id_product,id_product_attribute,reference,price_te]',
     limit: `0,${cappedLimit}`
@@ -131,7 +131,7 @@ export async function findStockEntry({ productId, productAttributeId = 0, wareho
 
   const fallbackXml = await getXml('stocks', {
     display: '[id,id_warehouse,id_product,id_product_attribute,price_te]',
-    limit: '0,1000'
+    limit: '0,10000'
   })
   const fallbackDoc = parseXml(fallbackXml)
   const nodes = Array.from(fallbackDoc.querySelectorAll('stock'))
