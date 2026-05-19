@@ -4,6 +4,8 @@ import { listOrderIds } from '@/services/entities/ordersService'
 import { readCategory } from '@/services/entities/categoriesService'
 import { readProduct } from '@/services/entities/productsService'
 import { buildOrderConfig } from '@/services/order/commandeAchatService'
+import { getProductPricing } from '@/services/pricing/productPricingService'
+import { listStockAvailableEntries } from '@/services/entities/stockAvailablesService'
 
 function textValue(value) {
   if (value === undefined || value === null) return null
@@ -49,6 +51,14 @@ function toFloat(value, fallback = 0) {
   const normalized = String(pickText(value) ?? '').replace(',', '.')
   const parsed = Number.parseFloat(normalized)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function toCents(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100)
+}
+
+function fromCents(value) {
+  return Number.isFinite(value) ? value / 100 : 0
 }
 
 function ensureArray(value) {
@@ -172,8 +182,9 @@ export async function fetchBackofficeSalesStats() {
   const productCache = new Map()
   const categoryCache = new Map()
 
-  let totalSalesHt = 0
-  let totalPurchaseHt = 0
+  let totalSalesHtCents = 0
+  let totalSalesTtcCents = 0
+  let totalPurchaseHtCents = 0
 
   const byCategory = new Map()
 
@@ -198,13 +209,19 @@ export async function fetchBackofficeSalesStats() {
     }
 
     for (const row of rows) {
-      const sale = Number.isFinite(row.totalExcl) ? row.totalExcl : 0
-      totalSalesHt += sale
+      const pricing = await getProductPricing(row.productId, row.productAttributeId)
+      const unitTtc = pricing?.priceTtc || 0
+      const totalTtcCents = toCents(unitTtc * row.quantity)
+      const divisor = 1 + (pricing?.taxRate || 0) / 100
+      const totalHtCents = divisor ? Math.round(totalTtcCents / divisor) : totalTtcCents
+
+      totalSalesHtCents += totalHtCents
+      totalSalesTtcCents += totalTtcCents
 
       const productCore = await fetchProductCore(row.productId, productCache)
       const purchaseUnit = productCore?.wholesalePrice || 0
-      const purchaseTotal = purchaseUnit * row.quantity
-      totalPurchaseHt += purchaseTotal
+      const purchaseTotalCents = toCents(purchaseUnit * row.quantity)
+      totalPurchaseHtCents += purchaseTotalCents
 
       const categoryId = productCore?.categoryId || DEFAULT_CATEGORY_ID
       const categoryName = await fetchCategoryName(categoryId, categoryCache)
@@ -213,25 +230,79 @@ export async function fetchBackofficeSalesStats() {
         id: categoryId,
         name: categoryName,
         sales: 0,
+        salesTtc: 0,
+        salesHtCents: 0,
+        salesTtcCents: 0,
         purchase: 0,
+        purchaseCents: 0,
         profit: 0
       }
 
-      current.sales += sale
-      current.purchase += purchaseTotal
+      current.salesHtCents += totalHtCents
+      current.salesTtcCents += totalTtcCents
+      current.purchaseCents += purchaseTotalCents
+      current.sales = fromCents(current.salesHtCents)
+      current.salesTtc = fromCents(current.salesTtcCents)
+      current.purchase = fromCents(current.purchaseCents)
       current.profit = current.sales - current.purchase
       byCategory.set(categoryId, current)
     }
   }
 
+  const totalSalesHt = fromCents(totalSalesHtCents)
+  const totalSalesTtc = fromCents(totalSalesTtcCents)
+  const totalPurchaseHt = fromCents(totalPurchaseHtCents)
+
+  const investment = await computeInventoryInvestment(productCache)
+  const investmentTotal = investment.totalInvestment
+  const investmentProfit = totalSalesHt - investmentTotal
+
   const categories = Array.from(byCategory.values()).sort((a, b) => b.profit - a.profit)
 
   return {
     totalSalesHt,
+    totalSalesTtc,
     totalPurchaseHt,
     totalProfit: totalSalesHt - totalPurchaseHt,
+    totalInvestment: investmentTotal,
+    investmentProfit,
     categories
   }
+}
+
+async function computeInventoryInvestment(productCache) {
+  const entries = await listStockAvailableEntries()
+  if (!entries.length) {
+    return { totalInvestment: 0 }
+  }
+
+  const grouped = new Map()
+  for (const entry of entries) {
+    const current = grouped.get(entry.productId) || []
+    current.push(entry)
+    grouped.set(entry.productId, current)
+  }
+
+  let totalCents = 0
+
+  for (const [productId, list] of grouped.entries()) {
+    const hasAttributes = list.some((row) => row.productAttributeId > 0)
+    const filtered = hasAttributes
+      ? list.filter((row) => row.productAttributeId > 0)
+      : list
+
+    const productCore = await fetchProductCore(productId, productCache)
+    const purchaseUnit = productCore?.wholesalePrice || 0
+
+    for (const row of filtered) {
+      if (!row.quantity) {
+        continue
+      }
+      totalCents += toCents(purchaseUnit * row.quantity)
+    }
+  }
+
+  return { totalInvestment: fromCents(totalCents) }
 }
 
 export default {

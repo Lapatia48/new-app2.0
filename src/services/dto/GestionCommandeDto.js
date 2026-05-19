@@ -5,6 +5,7 @@ import { listCartIds } from '@/services/entities/cartsService'
 import { readCombination } from '@/services/entities/combinationsService'
 import { findProductInfoById } from '@/services/entities/productsService'
 import { createOrderHistory } from '@/services/entities/orderHistoriesService'
+import { getProductPricing } from '@/services/pricing/productPricingService'
 import {
   adjustStockQuantityByProduct,
   adjustStockQuantityByProductAttribute
@@ -55,6 +56,116 @@ function toFloat(value, fallback = 0) {
 
 function formatMoney(value) {
   return toFloat(value, 0).toFixed(2)
+}
+
+function toCents(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100)
+}
+
+function fromCents(value) {
+  return Number.isFinite(value) ? value / 100 : 0
+}
+
+async function enrichRowsWithPricing(rows) {
+  if (!Array.isArray(rows) || !rows.length) {
+    return []
+  }
+
+  const cache = new Map()
+
+  const priced = await Promise.all(
+    rows.map(async (row) => {
+      const productId = toNumber(row?.productId, 0)
+      const productAttributeId = toNumber(row?.productAttributeId, 0)
+      if (!productId) {
+        const fallbackPrice = toFloat(row?.price, 0)
+        const fallbackTotal = toFloat(row?.total, fallbackPrice * toNumber(row?.quantity, 0))
+        const fallbackPriceCents = toCents(fallbackPrice)
+        const fallbackTotalCents = toCents(fallbackTotal)
+        return {
+          ...row,
+          priceTtcValue: fromCents(fallbackPriceCents),
+          priceHtValue: fromCents(fallbackPriceCents),
+          totalTtcValue: fromCents(fallbackTotalCents),
+          totalHtValue: fromCents(fallbackTotalCents),
+          priceTtc: formatMoney(fromCents(fallbackPriceCents)),
+          priceHt: formatMoney(fromCents(fallbackPriceCents)),
+          totalTtc: formatMoney(fromCents(fallbackTotalCents)),
+          totalHt: formatMoney(fromCents(fallbackTotalCents)),
+          taxRate: 0
+        }
+      }
+
+      const cacheKey = `${productId}:${productAttributeId}`
+      let pricing = cache.get(cacheKey)
+      if (!pricing) {
+        pricing = await getProductPricing(productId, productAttributeId)
+        cache.set(cacheKey, pricing || null)
+      }
+
+      if (!pricing) {
+        const fallbackPrice = toFloat(row?.price, 0)
+        const fallbackTotal = toFloat(row?.total, fallbackPrice * toNumber(row?.quantity, 0))
+        const fallbackPriceCents = toCents(fallbackPrice)
+        const fallbackTotalCents = toCents(fallbackTotal)
+        return {
+          ...row,
+          priceTtcValue: fromCents(fallbackPriceCents),
+          priceHtValue: fromCents(fallbackPriceCents),
+          totalTtcValue: fromCents(fallbackTotalCents),
+          totalHtValue: fromCents(fallbackTotalCents),
+          priceTtc: formatMoney(fromCents(fallbackPriceCents)),
+          priceHt: formatMoney(fromCents(fallbackPriceCents)),
+          totalTtc: formatMoney(fromCents(fallbackTotalCents)),
+          totalHt: formatMoney(fromCents(fallbackTotalCents)),
+          taxRate: 0
+        }
+      }
+
+      const quantity = toNumber(row?.quantity, 0)
+      const unitTtc = pricing.priceTtc || 0
+      const unitTtcCents = toCents(unitTtc)
+      const totalTtcCents = toCents(unitTtc * quantity)
+      const divisor = 1 + (pricing.taxRate || 0) / 100
+      const unitHtCents = divisor ? Math.round(unitTtcCents / divisor) : unitTtcCents
+      const totalHtCents = divisor ? Math.round(totalTtcCents / divisor) : totalTtcCents
+      const unitHt = fromCents(unitHtCents)
+      const totalTtc = fromCents(totalTtcCents)
+      const totalHt = fromCents(totalHtCents)
+
+      return {
+        ...row,
+        priceTtcValue: fromCents(unitTtcCents),
+        priceHtValue: unitHt,
+        totalTtcValue: totalTtc,
+        totalHtValue: totalHt,
+        priceTtc: formatMoney(fromCents(unitTtcCents)),
+        priceHt: formatMoney(unitHt),
+        totalTtc: formatMoney(totalTtc),
+        totalHt: formatMoney(totalHt),
+        taxRate: pricing.taxRate
+      }
+    })
+  )
+
+  return priced
+}
+
+function computePricingTotals(rows) {
+  return rows.reduce(
+    (acc, row) => {
+      const totalTtc = Number.isFinite(row?.totalTtcValue)
+        ? row.totalTtcValue
+        : toFloat(row?.totalTtc, 0)
+      const totalHt = Number.isFinite(row?.totalHtValue)
+        ? row.totalHtValue
+        : toFloat(row?.totalHt, 0)
+      acc.totalTtc += totalTtc
+      acc.totalHt += totalHt
+      return acc
+    },
+    { totalTtc: 0, totalHt: 0 }
+  )
 }
 
 function formatStateLabel(stateId, config) {
@@ -313,6 +424,11 @@ export async function buildGestionCommandeDto(orderId) {
     fetchOrderRows(order)
   ])
 
+  const pricedRows = await enrichRowsWithPricing(rows)
+  const pricingTotals = computePricingTotals(pricedRows)
+  const totalPaidTtc = pricingTotals.totalTtc || toFloat(pickText(order.total_paid_real, order.total_paid, 0), 0)
+  const totalPaidHt = pricingTotals.totalHt || 0
+
   const config = buildOrderConfig()
   const currentStateId = toNumber(order.current_state, 0)
   const dateValue = pickText(order.date_add, order.invoice_date) || EMPTY_LABEL
@@ -325,14 +441,16 @@ export async function buildGestionCommandeDto(orderId) {
     cart,
     addressDelivery,
     addressInvoice,
-    rows,
+    rows: pricedRows,
     summary: {
       id: resolvedOrderId,
       orderId: resolvedOrderId,
       cartId: resolvedCartId || 0,
       date: dateValue,
       customerName: getCustomerDisplayName(customer),
-      totalPaid: formatMoney(pickText(order.total_paid_real, order.total_paid, 0)),
+      totalPaid: formatMoney(totalPaidTtc),
+      totalPaidTtc: formatMoney(totalPaidTtc),
+      totalPaidHt: formatMoney(totalPaidHt),
       currentStateId,
       currentStateLabel: formatStateLabel(currentStateId, config),
       isCart: false
@@ -367,7 +485,10 @@ export async function buildGestionPanierDto(cartId) {
 
   const dateValue = pickText(cart.date_add, cart.date_upd) || EMPTY_LABEL
   const resolvedCartId = toNumber(cart.id, cartId)
-  const totalValue = computeRowsTotal(rows)
+  const pricedRows = await enrichRowsWithPricing(rows)
+  const pricingTotals = computePricingTotals(pricedRows)
+  const totalValue = pricingTotals.totalTtc || computeRowsTotal(rows)
+  const totalHtValue = pricingTotals.totalHt || 0
 
   return {
     order: null,
@@ -375,7 +496,7 @@ export async function buildGestionPanierDto(cartId) {
     customer,
     addressDelivery,
     addressInvoice,
-    rows,
+    rows: pricedRows,
     summary: {
       id: resolvedCartId,
       orderId: null,
@@ -383,6 +504,8 @@ export async function buildGestionPanierDto(cartId) {
       date: dateValue,
       customerName: getCustomerDisplayName(customer),
       totalPaid: formatMoney(totalValue),
+      totalPaidTtc: formatMoney(totalValue),
+      totalPaidHt: formatMoney(totalHtValue),
       currentStateId: 0,
       currentStateLabel: CART_LABEL,
       isCart: true

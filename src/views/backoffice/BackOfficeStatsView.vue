@@ -4,9 +4,12 @@ import { fetchBackofficeSalesStats } from '@/services/backoffice/statsService'
 
 const loading = ref(false)
 const error = ref('')
+const totalSalesTtc = ref(0)
 const totalSalesHt = ref(0)
 const totalPurchaseHt = ref(0)
 const totalProfit = ref(0)
+const totalInvestment = ref(0)
+const investmentProfit = ref(0)
 const categories = ref([])
 
 const maxAbsProfit = computed(() => {
@@ -28,9 +31,12 @@ async function loadStats() {
   error.value = ''
   try {
     const data = await fetchBackofficeSalesStats()
+    totalSalesTtc.value = data.totalSalesTtc
     totalSalesHt.value = data.totalSalesHt
     totalPurchaseHt.value = data.totalPurchaseHt
     totalProfit.value = data.totalProfit
+    totalInvestment.value = data.totalInvestment
+    investmentProfit.value = data.investmentProfit
     categories.value = data.categories || []
   } catch (err) {
     error.value = err?.message || 'Erreur lors du chargement des statistiques.'
@@ -64,6 +70,10 @@ onMounted(() => {
 
     <div v-else class="content">
       <div class="summary">
+        <!-- <article class="summary-card">
+          <p class="label">Ventes TTC</p>
+          <p class="value">{{ formatMoney(totalSalesTtc) }}</p>
+        </article> -->
         <article class="summary-card">
           <p class="label">Ventes HT</p>
           <p class="value">{{ formatMoney(totalSalesHt) }}</p>
@@ -73,10 +83,17 @@ onMounted(() => {
           <p class="value">{{ formatMoney(totalPurchaseHt) }}</p>
         </article>
         <article class="summary-card">
-          <p class="label">Benefice total</p>
+          <p class="label">Benefices sur vente</p>
           <p class="value" :class="profitClass(totalProfit)">
             {{ formatMoney(totalProfit) }}
           </p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Benefices sur investissement</p>
+          <p class="value" :class="profitClass(investmentProfit)">
+            {{ formatMoney(investmentProfit) }}
+          </p>
+          <p class="muted">Investissement total: {{ formatMoney(totalInvestment) }}</p>
         </article>
       </div>
 
@@ -98,6 +115,7 @@ onMounted(() => {
           <thead>
             <tr>
               <th>Categorie</th>
+              <th>Ventes TTC</th>
               <th>Ventes HT</th>
               <th>Achats HT</th>
               <th>Benefice</th>
@@ -109,6 +127,7 @@ onMounted(() => {
               <td>
                 <span class="category">{{ entry.name }}</span>
               </td>
+              <td class="mono">{{ formatMoney(entry.salesTtc) }}</td>
               <td class="mono">{{ formatMoney(entry.sales) }}</td>
               <td class="mono">{{ formatMoney(entry.purchase) }}</td>
               <td class="mono" :class="profitClass(entry.profit)">

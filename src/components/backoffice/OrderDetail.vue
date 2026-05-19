@@ -191,7 +191,8 @@ function close() {
             <h3>Resume</h3>
             <p>Commande #{{ summary.id || '-' }}</p>
             <p>Date: {{ summary.date || '-' }}</p>
-            <p>Total: {{ summary.totalPaid || '-' }}</p>
+            <p>Total TTC: {{ summary.totalPaidTtc || summary.totalPaid || '-' }}</p>
+            <p>Total HT: {{ summary.totalPaidHt || summary.totalPaid || '-' }}</p>
           </div>
         </div>
 
@@ -213,9 +214,11 @@ function close() {
                 <div class="item-title">{{ it.name || '-' }}</div>
                 <div class="item-meta">Ref: {{ it.reference }}</div>
                 <div class="item-meta">Qte: {{ it.quantity }}</div>
-                <div class="item-price">{{ it.price }}</div>
+                <div class="item-price">TTC {{ it.priceTtc || it.price }}</div>
+                <div class="item-price">HT {{ it.priceHt || it.price }}</div>
               </div>
-              <div class="item-total">Total {{ it.total }}</div>
+              <div class="item-total">Total TTC {{ it.totalTtc || it.total }}</div>
+              <div class="item-total">Total HT {{ it.totalHt || it.total }}</div>
             </article>
           </div>
         </div>

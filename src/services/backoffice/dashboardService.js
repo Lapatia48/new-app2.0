@@ -45,11 +45,15 @@ export async function fetchBackofficeDashboardStats() {
     .filter((entry) => !entry?.summary?.isCart)
     .map((entry) => {
       const stateKey = getStateKey(entry, config)
+      const amountTtc = toAmount(entry?.summary?.totalPaidTtc || entry?.summary?.totalPaid)
+      const amountHt = toAmount(entry?.summary?.totalPaidHt)
       return {
         id: Number.parseInt(String(entry?.summary?.id || ''), 10) || 0,
         orderId: Number.parseInt(String(entry?.summary?.orderId || ''), 10) || 0,
         date: toDateKey(entry?.summary?.date),
-        amount: toAmount(entry?.summary?.totalPaid),
+        amount: amountTtc,
+        amountTtc,
+        amountHt,
         stateKey,
         stateLabel: getStateLabel(stateKey),
         customerName: entry?.summary?.customerName || '',

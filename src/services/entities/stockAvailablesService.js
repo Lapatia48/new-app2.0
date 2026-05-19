@@ -7,6 +7,25 @@ export function listStockAvailableIds() {
   return fetchAllIds('stock_availables', 'stock_available')
 }
 
+export async function listStockAvailableEntries(limit = 1000) {
+  const cappedLimit = Math.min(Math.max(limit, 1), 2000)
+  const xml = await getXml('stock_availables', {
+    display: '[id_product,id_product_attribute,quantity]',
+    limit: `0,${cappedLimit}`
+  })
+  const doc = parseXml(xml)
+  const nodes = Array.from(doc.querySelectorAll('stock_available'))
+  return nodes
+    .map((node) => {
+      const productId = toInt(getText(node, 'id_product'), 0)
+      const productAttributeId = toInt(getText(node, 'id_product_attribute'), 0)
+      const quantity = toInt(getText(node, 'quantity'), 0)
+      if (!productId) return null
+      return { productId, productAttributeId, quantity }
+    })
+    .filter(Boolean)
+}
+
 export async function readStockAvailable(id) {
   const xml = await getXml(`stock_availables/${id}`)
   return xmlToJson(xml)

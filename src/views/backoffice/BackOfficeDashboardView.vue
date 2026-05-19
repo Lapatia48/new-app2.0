@@ -80,7 +80,11 @@ const deliveredCount = computed(() =>
 )
 
 const filteredTotalAmount = computed(() =>
-  filteredOrders.value.reduce((sum, entry) => sum + entry.amount, 0)
+  filteredOrders.value.reduce((sum, entry) => sum + entry.amountTtc, 0)
+)
+
+const filteredTotalAmountHt = computed(() =>
+  filteredOrders.value.reduce((sum, entry) => sum + entry.amountHt, 0)
 )
 
 const maxCount = computed(() => {
@@ -195,8 +199,12 @@ onMounted(() => {
           <p class="value">{{ deliveredCount }}</p>
         </article>
         <article class="summary-card">
-          <p class="label">Montant total</p>
+          <p class="label">Montant total TTC</p>
           <p class="value">{{ formatMoney(filteredTotalAmount) }}</p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Montant total HT</p>
+          <p class="value">{{ formatMoney(filteredTotalAmountHt) }}</p>
         </article>
       </div>
 
@@ -244,7 +252,8 @@ onMounted(() => {
               <th>Client</th>
               <th>Date</th>
               <th>Etat</th>
-              <th>Montant</th>
+              <th>Montant TTC</th>
+              <th>Montant HT</th>
             </tr>
           </thead>
           <tbody>
@@ -258,7 +267,8 @@ onMounted(() => {
               <td>
                 <span class="state" :class="entry.stateKey">{{ stateLabel(entry.stateKey) }}</span>
               </td>
-              <td class="mono">{{ formatMoney(entry.amount) }}</td>
+              <td class="mono">{{ formatMoney(entry.amountTtc) }}</td>
+              <td class="mono">{{ formatMoney(entry.amountHt) }}</td>
             </tr>
           </tbody>
         </table>

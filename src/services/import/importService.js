@@ -233,10 +233,10 @@ async function importProducts(rows) {
     const categoryId = await ensureCategoryId(categoryName)
     const availableDate = toIsoDate(row.date_availability_produit || row.date_produit)
     const taxRate = parseTaxRate(row.taxe ?? row.tax)
-    // const taxRulesGroupId = taxRate === null
-    //   ? 0
-    //   : await ensureTaxRulesGroupId(taxRate, taxContext)
-    const taxRulesGroupId = 0
+    const taxRulesGroupId = taxRate === null
+      ? 0
+      : await ensureTaxRulesGroupId(taxRate, taxContext)
+    // const taxRulesGroupId = 0
 
     const input = {
       name,

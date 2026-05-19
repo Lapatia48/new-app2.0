@@ -62,6 +62,7 @@ const filteredOrders = computed(() => {
       summary.customerName,
       summary.date,
       summary.totalPaid,
+      summary.totalPaidHt,
       summary.currentStateLabel
     ]
       .map((value) => String(value || '').toLowerCase())
@@ -270,7 +271,8 @@ onMounted(() => {
             <th>ID</th>
             <th>Date</th>
             <th>Client</th>
-            <th>Total</th>
+            <th>Total TTC</th>
+            <th>Total HT</th>
             <th>Etat</th>
             <th>Actions</th>
           </tr>
@@ -284,7 +286,8 @@ onMounted(() => {
             <td class="mono">#{{ entry.summary.id }}</td>
             <td>{{ entry.summary.date }}</td>
             <td>{{ entry.summary.customerName }}</td>
-            <td class="mono">{{ entry.summary.totalPaid }}</td>
+            <td class="mono">{{ entry.summary.totalPaidTtc || entry.summary.totalPaid }}</td>
+            <td class="mono">{{ entry.summary.totalPaidHt || entry.summary.totalPaid }}</td>
             <td>
               <span class="badge" :class="stateClass(entry.summary.currentStateLabel)">
                 {{ entry.summary.currentStateLabel }}
