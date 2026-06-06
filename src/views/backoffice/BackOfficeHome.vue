@@ -5,10 +5,22 @@
             <h1>Bienvenue sur le BackOffice</h1>
             <p>
                 Vous êtes connecté avec les identifiants configurés dans le fichier .env.
+                Utilisez le menu ci-dessous pour gérer les données GLPI.
             </p>
+
+            <div class="cartes">
+                <RouterLink :to="{ name: 'bo-dashboard' }" class="carte">Tableau de bord</RouterLink>
+                <RouterLink :to="{ name: 'bo-tickets' }" class="carte">Tickets</RouterLink>
+                <RouterLink :to="{ name: 'bo-import' }" class="carte">Importer les données</RouterLink>
+                <RouterLink :to="{ name: 'bo-reset' }" class="carte">Réinitialiser</RouterLink>
+            </div>
         </section>
     </div>
 </template>
+
+<script setup>
+import { RouterLink } from 'vue-router'
+</script>
 
 <style scoped>
 .backoffice-home {
@@ -46,5 +58,26 @@ p {
     font-size: 1.05rem;
     line-height: 1.6;
     color: #334155;
+}
+
+.cartes {
+    margin-top: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+}
+
+.carte {
+    display: block;
+    padding: 1rem;
+    text-align: center;
+    border-radius: 10px;
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.carte:hover {
+    background: #1d4ed8;
 }
 </style>

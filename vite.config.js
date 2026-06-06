@@ -13,9 +13,13 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/prestashop': {
-        target: 'http://localhost',
-        changeOrigin: true
+      // Tout ce qui commence par /glpi est renvoye vers le serveur GLPI.
+      // Cela evite les erreurs CORS pendant le developpement.
+      // Exemple : /glpi/api.php/token  ->  http://glpi.local/api.php/token
+      '/glpi': {
+        target: 'http://glpi.local',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/glpi/, '')
       }
     }
   }
