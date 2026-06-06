@@ -1,68 +1,69 @@
 <template>
-    <div class="login-container">
-        <form class="login-form" @submit.prevent="login">
-            <h2>Bienvenue sur frontoffice</h2>
-        </form>
-    </div>
+  <div class="fo-home">
+    <section class="hero-card">
+      <p class="eyebrow">FrontOffice</p>
+      <h1>Bienvenue</h1>
+      <p>Consultez les elements ou creez un ticket d'assistance.</p>
+
+      <div class="cartes">
+        <RouterLink :to="{ name: 'fo-elements' }" class="carte">Voir les elements</RouterLink>
+        <RouterLink :to="{ name: 'fo-new-ticket' }" class="carte">Creer un ticket</RouterLink>
+      </div>
+    </section>
+  </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-
-const username = ref('')
-const password = ref('')
-
-const router = useRouter()
-
-function login() {
-    router.push('#')
-}
+import { RouterLink } from 'vue-router'
 </script>
 
 <style scoped>
-.login-container {
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: #f4f4f4;
+.fo-home {
+  display: grid;
+  place-items: center;
+  padding: 2rem;
 }
 
-.login-form {
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    width: 350px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+.hero-card {
+  width: min(100%, 640px);
+  padding: 3rem;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.15);
+  color: #0f172a;
 }
 
-.login-form h2 {
-    text-align: center;
-    margin-bottom: 1.5rem;
+.eyebrow {
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 1rem;
+h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2rem, 4vw, 3rem);
 }
 
-.form-group label {
-    margin-bottom: 0.5rem;
+.cartes {
+  margin-top: 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
 }
 
-.form-group input {
-    padding: 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+.carte {
+  display: block;
+  padding: 1rem;
+  text-align: center;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
 }
 
-button {
-    width: 100%;
-    padding: 0.75rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+.carte:hover {
+  background: #1d4ed8;
 }
 </style>
