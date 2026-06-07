@@ -2,14 +2,14 @@
 // reset.js
 // ----------------------------------------------------------------------------
 // Reinitialise les donnees : on supprime DEFINITIVEMENT tout ce qui a ete
-// importe (tickets, ordinateurs, ecrans). Les couts d'un ticket sont supprimes
-// automatiquement en meme temps que le ticket.
+// importe (tickets + tous les types d'elements du parc geres par
+// parcElements.json). Les couts d'un ticket sont supprimes automatiquement
+// en meme temps que le ticket.
 //
 // "log" est une fonction optionnelle pour afficher l'avancement a l'ecran.
 // ============================================================================
 
-import * as computer from './computer.js'
-import * as monitor from './monitor.js'
+import * as parcElement from './parcElement.js'
 import * as ticket from './ticket.js'
 import { clearDropdownCache } from './dropdowns.js'
 
@@ -23,18 +23,36 @@ async function supprimerTout(nom, service, log) {
   return elements.length
 }
 
+// Adapte parcElement.js (qui a besoin de l'itemtype a chaque appel) au format
+// attendu par supprimerTout (un service avec juste getAll/remove).
+function servicePourType(itemtype) {
+  return {
+    getAll: () => parcElement.getAll(itemtype),
+    remove: (id) => parcElement.remove(itemtype, id)
+  }
+}
+
 export async function resetAll(log = () => {}) {
   log('Debut de la reinitialisation...')
 
   // On supprime d'abord les tickets (ils dependent des materiels),
-  // puis les materiels.
+  // puis chaque type d'element du parc (Computer, Monitor, ...).
   const tickets = await supprimerTout('Ticket', ticket, log)
-  const computers = await supprimerTout('Ordinateur', computer, log)
-  const monitors = await supprimerTout('Ecran', monitor, log)
+
+  const materiels = {}
+  for (const def of parcElement.TYPES) {
+    try {
+      materiels[def.itemtype] = await supprimerTout(def.label, servicePourType(def.itemtype), log)
+    } catch (e) {
+      // Un type non listable dans ce GLPI est ignore (on continue le reset).
+      log('  (type ' + def.itemtype + ' ignore : ' + e.message + ')')
+      materiels[def.itemtype] = 0
+    }
+  }
 
   // Les identifiants des dropdowns ne sont plus valables : on vide le cache.
   clearDropdownCache()
 
   log('Reinitialisation terminee.')
-  return { tickets, computers, monitors }
+  return { tickets, materiels }
 }

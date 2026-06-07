@@ -11,8 +11,7 @@
 
       <select v-model="filtreType">
         <option value="">Tous les types</option>
-        <option value="Computer">Computer</option>
-        <option value="Monitor">Monitor</option>
+        <option v-for="def in typesParc" :key="def.itemtype" :value="def.itemtype">{{ def.itemtype }}</option>
       </select>
 
       <select v-model="filtreStatus">
@@ -71,7 +70,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { getAllElements } from '../../services/elements.js'
+import * as parcElement from '../../services/parcElement.js'
 
+const typesParc = parcElement.TYPES
 const elements = ref([])
 const enCours = ref(true)
 const erreur = ref('')

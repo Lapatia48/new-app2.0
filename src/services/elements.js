@@ -1,16 +1,16 @@
 // ============================================================================
 // elements.js  (API v1)
 // ----------------------------------------------------------------------------
-// Dans le frontoffice, un "element" est un materiel : ordinateur (Computer) ou
-// ecran (Monitor). Ce service va chercher les deux types et les met dans UNE
-// seule liste, avec des champs simples et toujours au meme format.
+// Dans le frontoffice, un "element" est un materiel du parc (Computer, Monitor,
+// ...). Ce service va chercher tous les types definis dans parcElements.json
+// et les met dans UNE seule liste, avec des champs simples et toujours au
+// meme format.
 //
 // On demande "expand_dropdowns" pour recevoir le NOM des dropdowns (statut,
 // lieu, ...) au lieu de leur id.
 // ============================================================================
 
-import * as computer from './computer.js'
-import * as monitor from './monitor.js'
+import * as parcElement from './parcElement.js'
 import { getImageUrl } from './images.js'
 
 // Avec expand_dropdowns, un champ vide revient sous la forme "&nbsp;".
@@ -22,31 +22,44 @@ function propre(valeur) {
 }
 
 // Transforme un materiel GLPI brut en objet simple et uniforme.
-function versElement(brut, type) {
-  // Le champ "modele" n'a pas le meme nom selon le type.
-  const modele = type === 'Computer' ? brut.computermodels_id : brut.monitormodels_id
-
-  return {
+// "def" est la definition du type (parcElements.json). On construit l'objet a
+// partir de def.fields (le meme mapping que pour l'import, mais dans l'autre
+// sens) : chaque champ a un "role" qui donne la cle d'affichage. Les roles
+// absents pour ce type (un Software n'a pas de "model") restent a ''.
+function versElement(brut, def) {
+  const element = {
     id: brut.id,
-    type, // 'Computer' ou 'Monitor'
-    name: propre(brut.name),
-    status: propre(brut.states_id),
-    location: propre(brut.locations_id),
-    manufacturer: propre(brut.manufacturers_id),
-    model: propre(modele),
-    inventory: propre(brut.otherserial),
-    contact: propre(brut.contact),
+    type: def.itemtype, // 'Computer', 'Monitor', ...
+    name: '',
+    status: '',
+    location: '',
+    manufacturer: '',
+    model: '',
+    inventory: '',
+    contact: '',
     image: getImageUrl(brut.name) // miniature locale si elle existe
   }
+
+  for (const champ of def.fields) {
+    element[champ.role] = propre(brut[champ.glpi])
+  }
+
+  return element
 }
 
-// Renvoie tous les elements (ordinateurs + ecrans) dans une seule liste.
+// Renvoie tous les elements du parc (tous types confondus) dans une seule liste.
 export async function getAllElements() {
-  const computers = await computer.getAll({ expand: true })
-  const monitors = await monitor.getAll({ expand: true })
+  let elements = []
 
-  return [
-    ...computers.map((c) => versElement(c, 'Computer')),
-    ...monitors.map((m) => versElement(m, 'Monitor'))
-  ]
+  for (const def of parcElement.TYPES) {
+    try {
+      const bruts = await parcElement.getAll(def.itemtype, { expand: true })
+      elements = elements.concat(bruts.map((brut) => versElement(brut, def)))
+    } catch (e) {
+      // Un type non listable (droits manquants, itemtype absent dans ce GLPI...)
+      // est simplement ignore : il ne doit pas casser toute la liste.
+    }
+  }
+
+  return elements
 }

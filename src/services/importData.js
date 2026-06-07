@@ -14,8 +14,7 @@
 import { parseCsv } from './csv.js'
 import { resolveDropdown } from './dropdowns.js'
 import { resetAll } from './reset.js'
-import * as computer from './computer.js'
-import * as monitor from './monitor.js'
+import * as parcElement from './parcElement.js'
 import * as ticket from './ticket.js'
 import * as ticketCost from './ticketCost.js'
 import * as itemTicket from './itemTicket.js'
@@ -87,37 +86,37 @@ async function importerMateriels(rows, images, log) {
   const mapMateriels = {}
 
   for (const row of rows) {
-    // Champs communs (le champ "User" du CSV = nom de personne -> champ contact).
-    const input = {
-      name: row.Name,
-      otherserial: row.Inventory_Number, // numero d'inventaire
-      contact: row.User,
-      states_id: await resolveDropdown('State', row.Status),
-      locations_id: await resolveDropdown('Location', row.Location),
-      manufacturers_id: await resolveDropdown('Manufacturer', row.Manufacturer)
-    }
-
-    let itemtype
-    let cree
-    if (row.Item_Type === 'Computer') {
-      input.computermodels_id = await resolveDropdown('ComputerModel', row.Model)
-      cree = await computer.create(input)
-      itemtype = 'Computer'
-    } else if (row.Item_Type === 'Monitor') {
-      input.monitormodels_id = await resolveDropdown('MonitorModel', row.Model)
-      cree = await monitor.create(input)
-      itemtype = 'Monitor'
-    } else {
+    // La definition du type (endpoint, dropdown du modele, ...) vient de
+    // parcElements.json : on ne fait plus de if/else par type de materiel.
+    const def = parcElement.TYPES.find((t) => t.itemtype === row.Item_Type)
+    if (!def) {
       throw new Error('Item_Type inconnu "' + row.Item_Type + '" pour le materiel ' + row.Name + '.')
     }
 
-    mapMateriels[row.Name] = { itemtype, id: cree.id }
-    log('  + Materiel importe : ' + row.Name + ' (' + itemtype + ')')
+    // Construction generique du payload : chaque type declare dans
+    // parcElements.json la liste des champs qu'il accepte (un Software n'a
+    // par exemple ni numero d'inventaire ni modele). On boucle donc sur
+    // def.fields au lieu d'ecrire un bloc "champs communs" fige.
+    //   - champ "dropdown"  -> on resout le texte en id GLPI (en le creant au besoin)
+    //   - champ simple      -> on copie la valeur telle quelle
+    const input = {}
+    for (const champ of def.fields) {
+      const valeur = row[champ.csv]
+      if (champ.dropdown) {
+        input[champ.glpi] = await resolveDropdown(champ.dropdown, valeur)
+      } else {
+        input[champ.glpi] = valeur
+      }
+    }
+
+    const cree = await parcElement.create(def.itemtype, input)
+    mapMateriels[row.Name] = { itemtype: def.itemtype, id: cree.id }
+    log('  + Materiel importe : ' + row.Name + ' (' + def.itemtype + ')')
 
     // Image reelle : si une image porte le meme nom, on l'envoie a GLPI.
     const image = images[row.Name]
     if (image) {
-      await uploadAndLink(image, row.Name, itemtype, cree.id)
+      await uploadAndLink(image, row.Name, def.itemtype, cree.id)
       log('     image envoyee : ' + image.name)
     }
   }

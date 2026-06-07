@@ -18,6 +18,7 @@
 <script setup>
 import { ref } from 'vue'
 import { resetAll } from '../../services/reset.js'
+import * as parcElement from '../../services/parcElement.js'
 
 const enCours = ref(false)
 const journal = ref([])
@@ -35,12 +36,10 @@ async function lancerReset() {
   journal.value = []
   try {
     const resume = await resetAll(log)
-    log(
-      'Termine : ' +
-      resume.tickets + ' ticket(s), ' +
-      resume.computers + ' ordinateur(s), ' +
-      resume.monitors + ' ecran(s) supprime(s).'
-    )
+    const detailMateriels = parcElement.TYPES
+      .map((def) => resume.materiels[def.itemtype] + ' ' + def.label.toLowerCase() + '(s)')
+      .join(', ')
+    log('Termine : ' + resume.tickets + ' ticket(s), ' + detailMateriels + ' supprime(s).')
   } catch (erreur) {
     log('ERREUR : ' + erreur.message)
   } finally {

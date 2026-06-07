@@ -12,8 +12,9 @@
         <p class="grand-nombre">{{ totalMateriels }}</p>
         <p class="sous-titre">elements au total</p>
         <ul class="detail">
-          <li><span>Ordinateurs</span><strong>{{ nbComputers }}</strong></li>
-          <li><span>Ecrans</span><strong>{{ nbMonitors }}</strong></li>
+          <li v-for="def in typesParc" :key="def.itemtype">
+            <span>{{ def.labelPluriel }}</span><strong>{{ materiels[def.itemtype].length }}</strong>
+          </li>
         </ul>
       </section>
 
@@ -34,19 +35,20 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import * as computer from '../../services/computer.js'
-import * as monitor from '../../services/monitor.js'
+import * as parcElement from '../../services/parcElement.js'
 import * as ticket from '../../services/ticket.js'
 
-const computers = ref([])
-const monitors = ref([])
+// La liste des types d'elements du parc vient de parcElements.json : ajouter
+// un nouveau type (Printer, ...) ne demande aucune modification ici.
+const typesParc = parcElement.TYPES
+const materiels = ref(Object.fromEntries(typesParc.map((def) => [def.itemtype, []])))
 const tickets = ref([])
 const enCours = ref(true)
 const erreur = ref('')
 
-const nbComputers = computed(() => computers.value.length)
-const nbMonitors = computed(() => monitors.value.length)
-const totalMateriels = computed(() => nbComputers.value + nbMonitors.value)
+const totalMateriels = computed(() =>
+  Object.values(materiels.value).reduce((somme, liste) => somme + liste.length, 0)
+)
 
 // Compte les tickets par type (1 = Incident, 2 = Demande).
 const ticketsParType = computed(() => {
@@ -60,8 +62,15 @@ const ticketsParType = computed(() => {
 
 onMounted(async () => {
   try {
-    computers.value = await computer.getAll()
-    monitors.value = await monitor.getAll()
+    // Chaque type est compte independamment : un type non listable dans ce
+    // GLPI (0 droit, itemtype absent...) reste a 0 sans casser le tableau.
+    for (const def of typesParc) {
+      try {
+        materiels.value[def.itemtype] = await parcElement.getAll(def.itemtype)
+      } catch (e) {
+        materiels.value[def.itemtype] = []
+      }
+    }
     tickets.value = await ticket.getAll()
   } catch (e) {
     erreur.value = e.message

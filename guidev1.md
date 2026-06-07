@@ -26,6 +26,18 @@ curl -X GET \
 # Réponse : { "session_token": "83af7e620c83a50a18d3eac2f6ed05a3ca0bea62" }
 ```
 
+si ca ne marche pas essayer 
+
+```bash
+curl.exe -X GET `
+  -H "Authorization: Basic Z2xwaTpnbHBp" `
+  -H "App-Token: VrNpco5nJR8zPjkyFXihKvXV4Jn9oz3ELNda1MqL" `
+  "http://glpi.local/apirest.php/initSession"
+
+# Réponse : { "session_token": "83af7e620c83a50a18d3eac2f6ed05a3ca0bea62" }
+```
+
+
 Ensuite, **chaque appel** doit envoyer l'en-tête `Session-Token: <le jeton>`
 (et `App-Token` si configuré).
 
@@ -75,8 +87,11 @@ Tout est centralisé dans `.env` :
 VITE_GLPI_BASE=/glpi/apirest.php   # via le proxy Vite (évite les CORS)
 VITE_GLPI_USERNAME=glpi
 VITE_GLPI_PASSWORD=glpi
-VITE_GLPI_APP_TOKEN=               # vide si non configuré
+VITE_GLPI_APP_TOKEN=VrNpco5n...    # jeton du client API (obligatoire sur ce GLPI)
 ```
+
+> Après toute modification du `.env`, **redémarrer `npm run dev`** : Vite ne lit
+> les variables qu'au démarrage.
 Le proxy `/glpi -> http://glpi.local` est défini dans `vite.config.js`.
 
 Le client se trouve dans `src/services/api.js` (initSession + get/post/put/del +
