@@ -11,6 +11,7 @@
     "gen:apiv1": "node tools/gen-apiv1.mjs"
   },
   "dependencies": {
+    "jszip": "^3.10.1",
     "vue": "^3.5.32",
     "vue-router": "^4.6.4"
   },

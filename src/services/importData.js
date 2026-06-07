@@ -1,11 +1,12 @@
 // ============================================================================
 // importData.js  (API v1)
 // ----------------------------------------------------------------------------
-// "Chef d'orchestre" de l'import. Il :
-//   1. verifie que les colonnes des CSV sont bien celles attendues
-//   2. importe les materiels (feuille1)   -> Computer / Monitor  (+ image reelle)
-//   3. importe les tickets (feuille2)      -> Ticket  (+ vrais liens materiels)
-//   4. importe les couts (feuille3)        -> TicketCost
+// "Chef d'orchestre" de l'import. Le nom des fichiers CSV n'a aucune
+// importance : seul l'ordre dans lequel ils sont deposes determine leur role,
+// et leurs entetes sont verifiees en consequence (cf EXPECTED_HEADERS) :
+//   1. 1er CSV  -> materiels   -> Computer / Monitor  (+ image reelle)
+//   2. 2e CSV   -> tickets     -> Ticket  (+ vrais liens materiels)
+//   3. 3e CSV   -> couts       -> TicketCost
 //
 // Tout se fait dans l'ordre. En cas d'erreur (colonne inconnue, nombre negatif,
 // etc.) on leve une exception ET on relance automatiquement le reset.
@@ -19,9 +20,12 @@ import * as ticket from './ticket.js'
 import * as ticketCost from './ticketCost.js'
 import * as itemTicket from './itemTicket.js'
 import { uploadAndLink } from './document.js'
+import { extraireImages } from './imagesZip.js'
 
 // ----------------------------------------------------------------------------
-// Colonnes attendues dans chaque fichier (le "modele").
+// Colonnes attendues pour chaque position de depot (1er, 2e, 3e fichier).
+// Le nom du fichier n'est jamais regarde : c'est l'ordre de depot puis ses
+// entetes qui determinent s'il s'agit des materiels, des tickets ou des couts.
 // ----------------------------------------------------------------------------
 export const EXPECTED_HEADERS = {
   feuille1: ['Name', 'Status', 'Location', 'Manufacturer', 'Item_Type', 'Model', 'Inventory_Number', 'User'],
@@ -198,20 +202,23 @@ async function importerCouts(rows, refVersId, log) {
 // ----------------------------------------------------------------------------
 // Fonction principale appelee par la page d'import.
 //   texte1/2/3 : contenu des 3 CSV
-//   images     : table { nomMateriel : fichierImage }  (peut etre vide)
+//   zipImages  : archive .zip des images des materiels (File, optionnelle)
 // ----------------------------------------------------------------------------
-export async function runImport({ texte1, texte2, texte3, images = {} }, log = () => {}) {
+export async function runImport({ texte1, texte2, texte3, zipImages = null }, log = () => {}) {
   try {
     // --- 1. Lecture + verification des colonnes ---
     const feuille1 = parseCsv(texte1)
     const feuille2 = parseCsv(texte2)
     const feuille3 = parseCsv(texte3)
 
-    verifierColonnes(feuille1.headers, EXPECTED_HEADERS.feuille1, 'feuille1 (materiels)')
-    verifierColonnes(feuille2.headers, EXPECTED_HEADERS.feuille2, 'feuille2 (tickets)')
-    verifierColonnes(feuille3.headers, EXPECTED_HEADERS.feuille3, 'feuille3 (couts)')
+    verifierColonnes(feuille1.headers, EXPECTED_HEADERS.feuille1, '1er fichier (materiels attendus)')
+    verifierColonnes(feuille2.headers, EXPECTED_HEADERS.feuille2, '2e fichier (tickets attendus)')
+    verifierColonnes(feuille3.headers, EXPECTED_HEADERS.feuille3, '3e fichier (couts attendus)')
 
     // --- 2. Import dans l'ordre ---
+    log('Lecture de l\'archive d\'images...')
+    const images = await extraireImages(zipImages, log)
+
     log('Import des materiels...')
     const mapMateriels = await importerMateriels(feuille1.rows, images, log)
 

@@ -2,35 +2,39 @@
   <div class="page">
     <h1>Importer les donnees</h1>
     <p class="info">
-      Choisissez les 3 fichiers CSV et le dossier des images depuis votre
-      ordinateur, puis cliquez sur "Lancer l'import".
+      Choisissez les 3 fichiers CSV et l'archive .zip des images depuis votre
+      ordinateur, puis cliquez sur "Lancer l'import". Le nom des fichiers
+      n'a pas d'importance : seul l'ordre dans lequel vous les deposez compte
+      (1er = materiels, 2e = tickets, 3e = couts), et leurs entetes sont
+      verifiees en consequence.
     </p>
 
-    <!-- Choix des fichiers -->
+    <!-- Choix des fichiers : peu importe leur nom, seul l'ordre compte -->
     <div class="champs">
       <label class="champ">
-        <span>feuille1.csv (materiels)</span>
+        <span>1er fichier CSV : materiels</span>
         <input type="file" accept=".csv" @change="choisirCsv($event, 1)" />
         <small>{{ nomFichier1 || 'Aucun fichier' }}</small>
       </label>
 
       <label class="champ">
-        <span>feuille2.csv (tickets)</span>
+        <span>2e fichier CSV : tickets</span>
         <input type="file" accept=".csv" @change="choisirCsv($event, 2)" />
         <small>{{ nomFichier2 || 'Aucun fichier' }}</small>
       </label>
 
       <label class="champ">
-        <span>feuille3.csv (couts)</span>
+        <span>3e fichier CSV : couts</span>
         <input type="file" accept=".csv" @change="choisirCsv($event, 3)" />
         <small>{{ nomFichier3 || 'Aucun fichier' }}</small>
       </label>
 
       <label class="champ">
-        <span>Dossier des images</span>
-        <!-- webkitdirectory permet de choisir un dossier entier -->
-        <input type="file" webkitdirectory multiple @change="choisirImages($event)" />
-        <small>{{ nbImages }} image(s) selectionnee(s)</small>
+        <span>Archive .zip des images</span>
+        <!-- L'archive est dezippee pendant l'import (cf runImport) : on y
+             cherche uniquement les fichiers images, le reste est ignore. -->
+        <input type="file" accept=".zip" @change="choisirImages($event)" />
+        <small>{{ nomFichierImages || 'Aucune archive (optionnel)' }}</small>
       </label>
     </div>
 
@@ -51,14 +55,14 @@ const texte1 = ref(null)
 const texte2 = ref(null)
 const texte3 = ref(null)
 
-// Table { nomMateriel : fichierImage } construite depuis le dossier choisi.
-const imagesMap = ref({})
+// Archive .zip des images choisie par l'utilisateur (dezippee pendant l'import).
+const zipImages = ref(null)
 
 // Noms affiches a l'ecran.
 const nomFichier1 = ref('')
 const nomFichier2 = ref('')
 const nomFichier3 = ref('')
-const nbImages = ref(0)
+const nomFichierImages = ref('')
 
 const enCours = ref(false)
 const journal = ref([])
@@ -77,20 +81,13 @@ async function choisirCsv(evenement, numero) {
   if (numero === 3) { texte3.value = contenu; nomFichier3.value = fichier.name }
 }
 
-// Construit la table { nomMateriel : fichierImage } a partir du dossier choisi.
-// Le nom du materiel = nom du fichier sans extension (ex: PC-LAB-002.jpeg -> PC-LAB-002).
-// Ces images seront REELLEMENT envoyees a GLPI pendant l'import.
+// On garde simplement l'archive choisie : c'est runImport qui la dezippe et
+// y cherche les images au moment de l'import (cf services/imagesZip.js).
 function choisirImages(evenement) {
-  const fichiers = Array.from(evenement.target.files)
-  const map = {}
-  for (const f of fichiers) {
-    if (/\.(png|jpe?g|gif|webp)$/i.test(f.name)) {
-      const nom = f.name.replace(/\.[^.]+$/, '')
-      map[nom] = f
-    }
-  }
-  imagesMap.value = map
-  nbImages.value = Object.keys(map).length
+  const fichier = evenement.target.files[0]
+  if (!fichier) return
+  zipImages.value = fichier
+  nomFichierImages.value = fichier.name
 }
 
 function log(message) {
@@ -106,7 +103,7 @@ async function lancerImport() {
         texte1: texte1.value,
         texte2: texte2.value,
         texte3: texte3.value,
-        images: imagesMap.value
+        zipImages: zipImages.value
       },
       log
     )
