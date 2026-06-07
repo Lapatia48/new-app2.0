@@ -1,16 +1,14 @@
 // ============================================================================
-// dropdowns.js
+// dropdowns.js  (API v1)
 // ----------------------------------------------------------------------------
-// Dans GLPI, des champs comme Location, Manufacturer, Status (State), Model...
-// ne sont pas du texte libre : ce sont des "dropdowns" (listes deroulantes).
-// Quand on cree un ordinateur, on doit donner l'identifiant (id) de la valeur,
-// pas son texte.
+// Dans GLPI, des champs comme Location, Manufacturer, State (statut), Model...
+// sont des "dropdowns" : on doit fournir leur identifiant (id), pas leur texte.
 //
 // resolveDropdown("Location", "Administration") va donc :
 //   1. chercher si "Administration" existe deja  -> renvoie son id
 //   2. sinon la creer                            -> renvoie le nouvel id
 //
-// On garde un petit cache pour ne pas refaire le meme appel plusieurs fois.
+// Un petit cache evite de refaire le meme appel plusieurs fois.
 // ============================================================================
 
 import { get, post } from './api.js'
@@ -19,37 +17,37 @@ import { get, post } from './api.js'
 const cache = {}
 
 export async function resolveDropdown(itemtype, name) {
-  // Pas de valeur dans le CSV -> rien a lier.
   if (!name) {
-    return null
+    return 0 // 0 = "aucun" dans GLPI
   }
 
-  const cleFiche = itemtype + '|' + name
-  if (cache[cleFiche] !== undefined) {
-    return cache[cleFiche]
+  const cle = itemtype + '|' + name
+  if (cache[cle] !== undefined) {
+    return cache[cle]
   }
 
-  const chemin = '/Dropdowns/' + itemtype
+  // 1. On cherche par le nom (searchText fait une recherche "contient").
+  const resultats = await get('/' + itemtype + '?searchText[name]=' + encodeURIComponent(name) + '&range=0-99')
 
-  // 1. On cherche la valeur par son nom.
-  //    Le filtre GLPI utilise la syntaxe RSQL : name=="texte".
-  const filtre = encodeURIComponent('name=="' + name + '"')
-  const trouves = await get(chemin + '?filter=' + filtre)
+  // On garde uniquement la correspondance EXACTE sur le nom.
+  const exact = Array.isArray(resultats)
+    ? resultats.find((r) => r.name === name)
+    : null
 
-  if (Array.isArray(trouves) && trouves.length > 0) {
-    cache[cleFiche] = trouves[0].id
-    return trouves[0].id
+  if (exact) {
+    cache[cle] = exact.id
+    return exact.id
   }
 
   // 2. Pas trouvee -> on la cree.
-  const cree = await post(chemin, { name })
-  cache[cleFiche] = cree.id
+  const cree = await post('/' + itemtype, { name })
+  cache[cle] = cree.id
   return cree.id
 }
 
 // On vide le cache apres un reset, car les ids ont change.
 export function clearDropdownCache() {
-  for (const cle of Object.keys(cache)) {
-    delete cache[cle]
+  for (const c of Object.keys(cache)) {
+    delete cache[c]
   }
 }

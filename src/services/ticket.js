@@ -1,29 +1,31 @@
 // ============================================================================
-// ticket.js
+// ticket.js  (API v1)
 // ----------------------------------------------------------------------------
 // Service pour l'entite "Ticket" (assistance) de GLPI.
 // ============================================================================
 
-import { get, post, patch, del } from './api.js'
+import { get, post, put, del } from './api.js'
 
-const ENDPOINT = '/Assistance/Ticket'
+const ENDPOINT = '/Ticket'
 
-export function getAll() {
-  return get(ENDPOINT)
+export function getAll(options = {}) {
+  let query = '?range=0-9999&get_hateoas=false'
+  if (options.expand) query += '&expand_dropdowns=true'
+  return get(ENDPOINT + query)
 }
 
 export function getOne(id) {
   return get(ENDPOINT + '/' + id)
 }
 
-export function create(body) {
-  return post(ENDPOINT, body)
+export function create(input) {
+  return post(ENDPOINT, input)
 }
 
-export function update(id, body) {
-  return patch(ENDPOINT + '/' + id, body)
+export function update(id, input) {
+  return put(ENDPOINT + '/' + id, input)
 }
 
 export function remove(id) {
-  return del(ENDPOINT + '/' + id + '?force=true')
+  return del(ENDPOINT + '/' + id + '?force_purge=true')
 }

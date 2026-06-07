@@ -1,18 +1,20 @@
 // ============================================================================
-// computer.js
+// computer.js  (API v1)
 // ----------------------------------------------------------------------------
 // Service pour l'entite "Computer" (ordinateur) de GLPI.
-// Il expose les 4 actions de base de l'API : get, post, patch, delete.
 // La transformation d'une ligne de CSV en objet GLPI se fait dans importData.js.
 // ============================================================================
 
-import { get, post, patch, del } from './api.js'
+import { get, post, put, del } from './api.js'
 
-const ENDPOINT = '/Assets/Computer'
+const ENDPOINT = '/Computer'
 
 // Liste tous les ordinateurs.
-export function getAll() {
-  return get(ENDPOINT)
+// options.expand = true  -> affiche le NOM des dropdowns au lieu de l'id.
+export function getAll(options = {}) {
+  let query = '?range=0-9999&get_hateoas=false'
+  if (options.expand) query += '&expand_dropdowns=true'
+  return get(ENDPOINT + query)
 }
 
 // Recupere un ordinateur par son id.
@@ -20,17 +22,17 @@ export function getOne(id) {
   return get(ENDPOINT + '/' + id)
 }
 
-// Cree un ordinateur. "body" est l'objet attendu par GLPI.
-export function create(body) {
-  return post(ENDPOINT, body)
+// Cree un ordinateur. "input" contient les champs GLPI (name, serial, ...).
+export function create(input) {
+  return post(ENDPOINT, input)
 }
 
 // Modifie un ordinateur existant.
-export function update(id, body) {
-  return patch(ENDPOINT + '/' + id, body)
+export function update(id, input) {
+  return put(ENDPOINT + '/' + id, input)
 }
 
-// Supprime DEFINITIVEMENT un ordinateur (force=true = pas de corbeille).
+// Supprime DEFINITIVEMENT un ordinateur (force_purge = pas de corbeille).
 export function remove(id) {
-  return del(ENDPOINT + '/' + id + '?force=true')
+  return del(ENDPOINT + '/' + id + '?force_purge=true')
 }

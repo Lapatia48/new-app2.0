@@ -51,6 +51,9 @@ const texte1 = ref(null)
 const texte2 = ref(null)
 const texte3 = ref(null)
 
+// Table { nomMateriel : fichierImage } construite depuis le dossier choisi.
+const imagesMap = ref({})
+
 // Noms affiches a l'ecran.
 const nomFichier1 = ref('')
 const nomFichier2 = ref('')
@@ -60,7 +63,7 @@ const nbImages = ref(0)
 const enCours = ref(false)
 const journal = ref([])
 
-// On a besoin des 3 CSV pour lancer l'import (les images restent locales).
+// On a besoin des 3 CSV pour lancer l'import (les images sont optionnelles).
 const toutEstLa = computed(() => texte1.value && texte2.value && texte3.value)
 
 // Lit le fichier CSV choisi et garde son contenu texte.
@@ -74,14 +77,20 @@ async function choisirCsv(evenement, numero) {
   if (numero === 3) { texte3.value = contenu; nomFichier3.value = fichier.name }
 }
 
-// Compte les images du dossier choisi.
-// Remarque : l'API GLPI 2.3 ne permet pas d'envoyer les images. Elles sont
-// donc gardees en local (dossier data/images) pour l'affichage. Ce champ sert
-// surtout a verifier que les images sont bien presentes.
+// Construit la table { nomMateriel : fichierImage } a partir du dossier choisi.
+// Le nom du materiel = nom du fichier sans extension (ex: PC-LAB-002.jpeg -> PC-LAB-002).
+// Ces images seront REELLEMENT envoyees a GLPI pendant l'import.
 function choisirImages(evenement) {
   const fichiers = Array.from(evenement.target.files)
-  const images = fichiers.filter((f) => /\.(png|jpe?g|gif|webp)$/i.test(f.name))
-  nbImages.value = images.length
+  const map = {}
+  for (const f of fichiers) {
+    if (/\.(png|jpe?g|gif|webp)$/i.test(f.name)) {
+      const nom = f.name.replace(/\.[^.]+$/, '')
+      map[nom] = f
+    }
+  }
+  imagesMap.value = map
+  nbImages.value = Object.keys(map).length
 }
 
 function log(message) {
@@ -93,7 +102,12 @@ async function lancerImport() {
   journal.value = []
   try {
     const resume = await runImport(
-      { texte1: texte1.value, texte2: texte2.value, texte3: texte3.value },
+      {
+        texte1: texte1.value,
+        texte2: texte2.value,
+        texte3: texte3.value,
+        images: imagesMap.value
+      },
       log
     )
     log(

@@ -1,0 +1,3119 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "GLPI REST API v1 (apirest.php) - endpoints utilises par new-app",
+    "version": "1.0.0",
+    "description": "Documentation generee par tools/gen-apiv1.mjs. Couvre les sessions, le CRUD des itemtypes utilises, l'upload de Document et les liens Item_Ticket / Document_Item."
+  },
+  "servers": [
+    {
+      "url": "http://glpi.local/apirest.php",
+      "description": "API REST GLPI v1"
+    }
+  ],
+  "paths": {
+    "/initSession": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Ouvrir une session et obtenir un session_token",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Basic base64(login:password) OU \"user_token xxx\"."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renvoie { session_token }."
+          },
+          "401": {
+            "description": "Identifiants invalides."
+          }
+        }
+      }
+    },
+    "/killSession": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Fermer la session",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session fermee."
+          }
+        }
+      }
+    },
+    "/Document": {
+      "post": {
+        "tags": [
+          "Document"
+        ],
+        "summary": "Envoyer un fichier (upload multipart)",
+        "description": "Envoi en multipart/form-data : champ \"uploadManifest\" (JSON { input: { name, _filename:[...] } }) + fichier dans \"filename[0]\".",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uploadManifest": {
+                    "type": "string",
+                    "description": "JSON serialise { input: { name, _filename } }."
+                  },
+                  "filename[0]": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document cree. Renvoie { id }."
+          }
+        }
+      }
+    },
+    "/Computer": {
+      "get": {
+        "tags": [
+          "Computer"
+        ],
+        "summary": "Lister les Computer",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Computer"
+        ],
+        "summary": "Creer un Computer",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Computer/{id}": {
+      "get": {
+        "tags": [
+          "Computer"
+        ],
+        "summary": "Lire un Computer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Computer"
+        ],
+        "summary": "Modifier un Computer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Computer"
+        ],
+        "summary": "Supprimer un Computer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/Monitor": {
+      "get": {
+        "tags": [
+          "Monitor"
+        ],
+        "summary": "Lister les Monitor",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Monitor"
+        ],
+        "summary": "Creer un Monitor",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Monitor/{id}": {
+      "get": {
+        "tags": [
+          "Monitor"
+        ],
+        "summary": "Lire un Monitor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Monitor"
+        ],
+        "summary": "Modifier un Monitor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Monitor"
+        ],
+        "summary": "Supprimer un Monitor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/Ticket": {
+      "get": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Lister les Ticket",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Creer un Ticket",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Ticket/{id}": {
+      "get": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Lire un Ticket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Modifier un Ticket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Supprimer un Ticket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/TicketCost": {
+      "get": {
+        "tags": [
+          "TicketCost"
+        ],
+        "summary": "Lister les TicketCost",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "TicketCost"
+        ],
+        "summary": "Creer un TicketCost",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/TicketCost/{id}": {
+      "get": {
+        "tags": [
+          "TicketCost"
+        ],
+        "summary": "Lire un TicketCost",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "TicketCost"
+        ],
+        "summary": "Modifier un TicketCost",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "TicketCost"
+        ],
+        "summary": "Supprimer un TicketCost",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/Item_Ticket": {
+      "get": {
+        "tags": [
+          "Item_Ticket"
+        ],
+        "summary": "Lister les Item_Ticket",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Item_Ticket"
+        ],
+        "summary": "Creer un Item_Ticket",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Item_Ticket/{id}": {
+      "get": {
+        "tags": [
+          "Item_Ticket"
+        ],
+        "summary": "Lire un Item_Ticket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Item_Ticket"
+        ],
+        "summary": "Modifier un Item_Ticket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Item_Ticket"
+        ],
+        "summary": "Supprimer un Item_Ticket",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/Document_Item": {
+      "get": {
+        "tags": [
+          "Document_Item"
+        ],
+        "summary": "Lister les Document_Item",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Document_Item"
+        ],
+        "summary": "Creer un Document_Item",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Document_Item/{id}": {
+      "get": {
+        "tags": [
+          "Document_Item"
+        ],
+        "summary": "Lire un Document_Item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Document_Item"
+        ],
+        "summary": "Modifier un Document_Item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Document_Item"
+        ],
+        "summary": "Supprimer un Document_Item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/State": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Lister les State",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Creer un State",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/State/{id}": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Lire un State",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Modifier un State",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Supprimer un State",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/Location": {
+      "get": {
+        "tags": [
+          "Location"
+        ],
+        "summary": "Lister les Location",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Location"
+        ],
+        "summary": "Creer un Location",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Location/{id}": {
+      "get": {
+        "tags": [
+          "Location"
+        ],
+        "summary": "Lire un Location",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Location"
+        ],
+        "summary": "Modifier un Location",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Location"
+        ],
+        "summary": "Supprimer un Location",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/Manufacturer": {
+      "get": {
+        "tags": [
+          "Manufacturer"
+        ],
+        "summary": "Lister les Manufacturer",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Manufacturer"
+        ],
+        "summary": "Creer un Manufacturer",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/Manufacturer/{id}": {
+      "get": {
+        "tags": [
+          "Manufacturer"
+        ],
+        "summary": "Lire un Manufacturer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Manufacturer"
+        ],
+        "summary": "Modifier un Manufacturer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Manufacturer"
+        ],
+        "summary": "Supprimer un Manufacturer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/ComputerModel": {
+      "get": {
+        "tags": [
+          "ComputerModel"
+        ],
+        "summary": "Lister les ComputerModel",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ComputerModel"
+        ],
+        "summary": "Creer un ComputerModel",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/ComputerModel/{id}": {
+      "get": {
+        "tags": [
+          "ComputerModel"
+        ],
+        "summary": "Lire un ComputerModel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ComputerModel"
+        ],
+        "summary": "Modifier un ComputerModel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ComputerModel"
+        ],
+        "summary": "Supprimer un ComputerModel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    },
+    "/MonitorModel": {
+      "get": {
+        "tags": [
+          "MonitorModel"
+        ],
+        "summary": "Lister les MonitorModel",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "example": "0-9999"
+            },
+            "description": "Pagination debut-fin."
+          },
+          {
+            "name": "expand_dropdowns",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Afficher le nom des dropdowns au lieu de l'id."
+          },
+          {
+            "name": "searchText[name]",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtre \"contient\" sur le nom."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des elements."
+          },
+          "206": {
+            "description": "Liste partielle (selon range)."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MonitorModel"
+        ],
+        "summary": "Creer un MonitorModel",
+        "parameters": [
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Champs de l'itemtype."
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cree. Renvoie { id }."
+          },
+          "207": {
+            "description": "Creation multiple avec statut par element."
+          },
+          "400": {
+            "description": "Erreur d'entree."
+          }
+        }
+      }
+    },
+    "/MonitorModel/{id}": {
+      "get": {
+        "tags": [
+          "MonitorModel"
+        ],
+        "summary": "Lire un MonitorModel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Element."
+          },
+          "401": {
+            "description": "Non autorise."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "MonitorModel"
+        ],
+        "summary": "Modifier un MonitorModel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "input"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mis a jour."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MonitorModel"
+        ],
+        "summary": "Supprimer un MonitorModel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force_purge",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Suppression definitive (pas de corbeille)."
+          },
+          {
+            "name": "Session-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton de session fourni par initSession."
+          },
+          {
+            "name": "App-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Jeton d'application (optionnel)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supprime (multiple)."
+          },
+          "204": {
+            "description": "Supprime (unique)."
+          }
+        }
+      }
+    }
+  }
+}

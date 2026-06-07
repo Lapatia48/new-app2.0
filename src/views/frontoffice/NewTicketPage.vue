@@ -44,7 +44,7 @@
         <div class="liste-elements">
           <p v-if="chargementElements">Chargement des elements...</p>
           <label v-for="el in elementsFiltres" :key="el.type + '-' + el.id" class="case">
-            <input type="checkbox" :value="el.name" v-model="selection" />
+            <input type="checkbox" :value="el" v-model="selection" />
             <span>{{ el.name }} <small>({{ el.type }})</small></span>
           </label>
         </div>
@@ -61,6 +61,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getAllElements } from '../../services/elements.js'
 import * as ticket from '../../services/ticket.js'
+import * as itemTicket from '../../services/itemTicket.js'
 
 // Tables de correspondance texte -> code GLPI.
 const TYPE_TICKET = { Incident: 1, Request: 2 }
@@ -71,7 +72,7 @@ const titre = ref('')
 const description = ref('')
 const type = ref('Incident')
 const priorite = ref('Medium')
-const selection = ref([]) // noms des elements coches
+const selection = ref([]) // elements coches (objets { id, type, name, ... })
 
 // Liste des elements a cocher
 const elements = ref([])
@@ -105,22 +106,27 @@ async function creerTicket() {
   messageErreur.value = false
 
   try {
-    // On ajoute les elements choisis dans la description (l'API ne permet pas
-    // de les lier directement au ticket).
-    let contenu = description.value
-    if (selection.value.length > 0) {
-      contenu += '\n\nMateriel concerne : ' + selection.value.join(', ')
-    }
+    const prio = PRIORITE[priorite.value]
 
-    const body = {
+    // 1. On cree le ticket.
+    const input = {
       name: titre.value,
-      content: contenu,
+      content: description.value,
       type: TYPE_TICKET[type.value],
-      priority: PRIORITE[priorite.value]
+      urgency: prio,
+      impact: prio,
+      priority: prio
+    }
+    const cree = await ticket.create(input)
+
+    // 2. On rattache REELLEMENT chaque element coche au ticket (Item_Ticket).
+    for (const el of selection.value) {
+      await itemTicket.create(cree.id, el.type, el.id)
     }
 
-    const cree = await ticket.create(body)
-    message.value = 'Ticket cree avec succes (numero ' + cree.id + ').'
+    message.value =
+      'Ticket cree avec succes (numero ' + cree.id + '), ' +
+      selection.value.length + ' element(s) rattache(s).'
 
     // On vide le formulaire.
     titre.value = ''

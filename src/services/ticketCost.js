@@ -1,28 +1,21 @@
 // ============================================================================
-// ticketCost.js
+// ticketCost.js  (API v1)
 // ----------------------------------------------------------------------------
-// Service pour les "couts" d'un ticket de GLPI.
-// Particularite : un cout appartient toujours a un ticket, donc l'URL contient
-// l'id du ticket :  /Assistance/Ticket/{ticketId}/Cost
+// Service pour les "couts" d'un ticket (itemtype TicketCost de GLPI).
+// En v1, le cout est un objet a part entiere qui pointe vers son ticket via le
+// champ "tickets_id". On peut lister les couts d'un ticket via les sous-items.
 // ============================================================================
 
-import { get, post, del } from './api.js'
+import { get, post } from './api.js'
 
-function endpoint(ticketId) {
-  return '/Assistance/Ticket/' + ticketId + '/Cost'
+const ENDPOINT = '/TicketCost'
+
+// Liste les couts d'un ticket (sous-items : /Ticket/{id}/TicketCost).
+export function getAllForTicket(ticketId) {
+  return get('/Ticket/' + ticketId + '/TicketCost')
 }
 
-// Liste les couts d'un ticket.
-export function getAll(ticketId) {
-  return get(endpoint(ticketId))
-}
-
-// Ajoute un cout a un ticket.
-export function create(ticketId, body) {
-  return post(endpoint(ticketId), body)
-}
-
-// Supprime un cout d'un ticket.
-export function remove(ticketId, costId) {
-  return del(endpoint(ticketId) + '/' + costId + '?force=true')
+// Ajoute un cout. "input" doit contenir tickets_id + actiontime, cost_time, ...
+export function create(input) {
+  return post(ENDPOINT, input)
 }

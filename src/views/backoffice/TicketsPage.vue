@@ -16,7 +16,7 @@
           @click="ouvrirFiche(t)"
         >
           <span class="item-titre">{{ t.name }}</span>
-          <span class="item-meta">{{ nomType(t.type) }} - {{ nomStatut(t) }}</span>
+          <span class="item-meta">{{ nomType(t.type) }} - {{ nomStatut(t.status) }}</span>
         </button>
       </div>
 
@@ -25,11 +25,14 @@
         <h2>{{ ticketSelectionne.name }}</h2>
 
         <dl>
+          <dt>Numero</dt>
+          <dd>#{{ ticketSelectionne.id }}</dd>
+
           <dt>Type</dt>
           <dd>{{ nomType(ticketSelectionne.type) }}</dd>
 
           <dt>Statut</dt>
-          <dd>{{ nomStatut(ticketSelectionne) }}</dd>
+          <dd>{{ nomStatut(ticketSelectionne.status) }}</dd>
 
           <dt>Priorite</dt>
           <dd>{{ nomPriorite(ticketSelectionne.priority) }}</dd>
@@ -37,12 +40,17 @@
           <dt>Date</dt>
           <dd>{{ ticketSelectionne.date || '-' }}</dd>
 
-          <dt>Reference</dt>
-          <dd>{{ ticketSelectionne.external_id || '-' }}</dd>
-
           <dt>Description</dt>
           <dd class="description">{{ ticketSelectionne.content || '-' }}</dd>
         </dl>
+
+        <h3>Materiels rattaches</h3>
+        <ul v-if="materiels.length" class="materiels">
+          <li v-for="m in materiels" :key="m.itemtype + '-' + m.items_id">
+            {{ nomMateriel(m) }} <small>({{ m.itemtype }})</small>
+          </li>
+        </ul>
+        <p v-else class="muted">Aucun materiel rattache.</p>
 
         <h3>Couts</h3>
         <table v-if="couts.length" class="couts">
@@ -51,7 +59,7 @@
           </thead>
           <tbody>
             <tr v-for="c in couts" :key="c.id">
-              <td>{{ c.duration }}</td>
+              <td>{{ c.actiontime }}</td>
               <td>{{ c.cost_time }}</td>
               <td>{{ c.cost_fixed }}</td>
             </tr>
@@ -71,16 +79,22 @@
 import { ref, onMounted } from 'vue'
 import * as ticket from '../../services/ticket.js'
 import * as ticketCost from '../../services/ticketCost.js'
+import * as itemTicket from '../../services/itemTicket.js'
+import { getAllElements } from '../../services/elements.js'
 
 const tickets = ref([])
 const ticketSelectionne = ref(null)
 const couts = ref([])
+const materiels = ref([])
 const enCours = ref(true)
 const erreur = ref('')
 
+// Table { "Computer-5" : "PC-ADM-001" } pour afficher le nom des materiels.
+const nomsMateriels = ref({})
+
 // Petites fonctions d'affichage : code GLPI -> texte lisible.
 function nomType(type) {
-  return type === 2 ? 'Demande' : 'Incident'
+  return Number(type) === 2 ? 'Demande' : 'Incident'
 }
 
 function nomPriorite(priorite) {
@@ -88,19 +102,23 @@ function nomPriorite(priorite) {
   return noms[priorite] || priorite
 }
 
-function nomStatut(t) {
-  // Le statut peut arriver sous forme d'objet { id, name }.
-  if (t.status && t.status.name) return t.status.name
+function nomStatut(statut) {
   const noms = { 1: 'Nouveau', 2: 'En cours', 3: 'Planifie', 4: 'En attente', 5: 'Resolu', 6: 'Clos' }
-  const id = t.status && t.status.id ? t.status.id : t.status
-  return noms[id] || '-'
+  return noms[statut] || statut
+}
+
+// Retrouve le nom du materiel a partir du lien Item_Ticket.
+function nomMateriel(lien) {
+  return nomsMateriels.value[lien.itemtype + '-' + lien.items_id] || ('#' + lien.items_id)
 }
 
 async function ouvrirFiche(t) {
   ticketSelectionne.value = t
   couts.value = []
+  materiels.value = []
   try {
-    couts.value = (await ticketCost.getAll(t.id)) || []
+    couts.value = (await ticketCost.getAllForTicket(t.id)) || []
+    materiels.value = (await itemTicket.getAllForTicket(t.id)) || []
   } catch (e) {
     erreur.value = e.message
   }
@@ -109,6 +127,12 @@ async function ouvrirFiche(t) {
 onMounted(async () => {
   try {
     tickets.value = await ticket.getAll()
+
+    // On charge les materiels une fois pour pouvoir afficher leurs noms.
+    const elements = await getAllElements()
+    for (const el of elements) {
+      nomsMateriels.value[el.type + '-' + el.id] = el.name
+    }
   } catch (e) {
     erreur.value = e.message
   } finally {
@@ -190,6 +214,11 @@ dd {
 
 .description {
   white-space: pre-wrap;
+}
+
+.materiels {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
 }
 
 .couts {

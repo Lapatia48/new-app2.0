@@ -1,15 +1,14 @@
 // ============================================================================
-// importData.js
+// importData.js  (API v1)
 // ----------------------------------------------------------------------------
-// C'est le "chef d'orchestre" de l'import. Il :
+// "Chef d'orchestre" de l'import. Il :
 //   1. verifie que les colonnes des CSV sont bien celles attendues
-//   2. importe les materiels (feuille1)   -> Computer / Monitor
-//   3. importe les tickets (feuille2)      -> Ticket
+//   2. importe les materiels (feuille1)   -> Computer / Monitor  (+ image reelle)
+//   3. importe les tickets (feuille2)      -> Ticket  (+ vrais liens materiels)
 //   4. importe les couts (feuille3)        -> TicketCost
 //
-// Tout se fait dans l'ordre (sequentiel). Si une erreur arrive (colonne
-// inconnue, nombre negatif, etc.) on releve une exception ET on relance
-// automatiquement le reset pour ne pas laisser des donnees a moitie importees.
+// Tout se fait dans l'ordre. En cas d'erreur (colonne inconnue, nombre negatif,
+// etc.) on leve une exception ET on relance automatiquement le reset.
 // ============================================================================
 
 import { parseCsv } from './csv.js'
@@ -19,10 +18,11 @@ import * as computer from './computer.js'
 import * as monitor from './monitor.js'
 import * as ticket from './ticket.js'
 import * as ticketCost from './ticketCost.js'
+import * as itemTicket from './itemTicket.js'
+import { uploadAndLink } from './document.js'
 
 // ----------------------------------------------------------------------------
 // Colonnes attendues dans chaque fichier (le "modele").
-// Si le CSV importe a des colonnes differentes, on leve une exception.
 // ----------------------------------------------------------------------------
 export const EXPECTED_HEADERS = {
   feuille1: ['Name', 'Status', 'Location', 'Manufacturer', 'Item_Type', 'Model', 'Inventory_Number', 'User'],
@@ -33,31 +33,24 @@ export const EXPECTED_HEADERS = {
 // ----------------------------------------------------------------------------
 // Tables de correspondance texte -> code GLPI.
 // ----------------------------------------------------------------------------
-// Type de ticket : 1 = Incident, 2 = Demande.
 const TYPE_TICKET = { Incident: 1, Request: 2, Demande: 2 }
-
-// Priorite : 1 (tres basse) ... 5 (tres haute).
 const PRIORITE = { 'Very Low': 1, Low: 2, Medium: 3, High: 4, 'Very High': 5 }
+const STATUT_TICKET = { New: 1, Assigned: 2, Planned: 3, Pending: 4, Solved: 5, Closed: 6 }
 
 // ----------------------------------------------------------------------------
 // Petites fonctions de verification (validations).
 // ----------------------------------------------------------------------------
-
-// Verifie que les colonnes du CSV sont exactement celles attendues.
 function verifierColonnes(headers, attendues, nomFeuille) {
-  const recu = headers.join(',')
-  const modele = attendues.join(',')
-  if (recu !== modele) {
+  if (headers.join(',') !== attendues.join(',')) {
     throw new Error(
       'Colonnes incorrectes dans ' + nomFeuille + '.\n' +
-      'Attendu : ' + modele + '\n' +
-      'Recu    : ' + recu
+      'Attendu : ' + attendues.join(',') + '\n' +
+      'Recu    : ' + headers.join(',')
     )
   }
 }
 
-// Transforme un texte en nombre positif. Gere la virgule decimale ("8,7" -> 8.7).
-// Leve une exception si ce n'est pas un nombre ou s'il est negatif.
+// Texte -> nombre positif. Gere la virgule decimale ("8,7" -> 8.7).
 function nombrePositif(valeur, champ) {
   const nombre = Number(String(valeur).replace(',', '.'))
   if (Number.isNaN(nombre)) {
@@ -69,16 +62,14 @@ function nombrePositif(valeur, champ) {
   return nombre
 }
 
-// Transforme une date "JJ/MM/AAAA" + une heure "HH:MM" en format GLPI
-// "AAAA-MM-JJ HH:MM:00".
+// "JJ/MM/AAAA" + "HH:MM" -> "AAAA-MM-JJ HH:MM:00" (format GLPI).
 function dateGlpi(dateFr, heure) {
   if (!dateFr) return null
   const [jour, mois, annee] = dateFr.split('/')
-  const heurePropre = heure || '00:00'
-  return annee + '-' + mois + '-' + jour + ' ' + heurePropre + ':00'
+  return annee + '-' + mois + '-' + jour + ' ' + (heure || '00:00') + ':00'
 }
 
-// Cherche un code dans une table de correspondance, sinon leve une exception.
+// Cherche un code dans une table, sinon leve une exception.
 function correspondance(table, valeur, champ) {
   const code = table[valeur]
   if (code === undefined) {
@@ -89,74 +80,94 @@ function correspondance(table, valeur, champ) {
 
 // ----------------------------------------------------------------------------
 // Etape 1 : import des materiels (feuille1).
-// Renvoie une table { nomMateriel : { type, id } } pour relier les tickets.
+// "images" est une table { nomMateriel : fichierImage } construite par la page.
+// Renvoie une table { nomMateriel : { itemtype, id } } pour relier les tickets.
 // ----------------------------------------------------------------------------
-async function importerMateriels(rows, log) {
+async function importerMateriels(rows, images, log) {
+  const mapMateriels = {}
+
   for (const row of rows) {
-    // Le champ "User" du CSV est un nom de personne : on le garde dans le
-    // champ texte "contact" (pas besoin de creer un compte utilisateur GLPI).
-    const body = {
+    // Champs communs (le champ "User" du CSV = nom de personne -> champ contact).
+    const input = {
       name: row.Name,
       otherserial: row.Inventory_Number, // numero d'inventaire
-      contact: row.User
+      contact: row.User,
+      states_id: await resolveDropdown('State', row.Status),
+      locations_id: await resolveDropdown('Location', row.Location),
+      manufacturers_id: await resolveDropdown('Manufacturer', row.Manufacturer)
     }
 
-    // Champs "dropdown" : on resout (ou cree) l'id correspondant au texte.
-    if (row.Status) body.status = { id: await resolveDropdown('State', row.Status) }
-    if (row.Location) body.location = { id: await resolveDropdown('Location', row.Location) }
-    if (row.Manufacturer) body.manufacturer = { id: await resolveDropdown('Manufacturer', row.Manufacturer) }
-
-    // Selon le type, on n'utilise pas le meme service ni le meme "modele".
+    let itemtype
+    let cree
     if (row.Item_Type === 'Computer') {
-      if (row.Model) body.model = { id: await resolveDropdown('ComputerModel', row.Model) }
-      await computer.create(body)
+      input.computermodels_id = await resolveDropdown('ComputerModel', row.Model)
+      cree = await computer.create(input)
+      itemtype = 'Computer'
     } else if (row.Item_Type === 'Monitor') {
-      if (row.Model) body.model = { id: await resolveDropdown('MonitorModel', row.Model) }
-      await monitor.create(body)
+      input.monitormodels_id = await resolveDropdown('MonitorModel', row.Model)
+      cree = await monitor.create(input)
+      itemtype = 'Monitor'
     } else {
       throw new Error('Item_Type inconnu "' + row.Item_Type + '" pour le materiel ' + row.Name + '.')
     }
 
-    log('  + Materiel importe : ' + row.Name + ' (' + row.Item_Type + ')')
+    mapMateriels[row.Name] = { itemtype, id: cree.id }
+    log('  + Materiel importe : ' + row.Name + ' (' + itemtype + ')')
+
+    // Image reelle : si une image porte le meme nom, on l'envoie a GLPI.
+    const image = images[row.Name]
+    if (image) {
+      await uploadAndLink(image, row.Name, itemtype, cree.id)
+      log('     image envoyee : ' + image.name)
+    }
   }
+
+  return mapMateriels
 }
 
 // ----------------------------------------------------------------------------
-// Etape 2 : import des tickets (feuille2).
-// Renvoie une table { Ref_Ticket : id_du_ticket_cree } pour relier les couts.
+// Etape 2 : import des tickets (feuille2) + vrais liens vers les materiels.
+// Renvoie une table { Ref_Ticket : id_du_ticket }.
 // ----------------------------------------------------------------------------
-async function importerTickets(rows, log) {
+async function importerTickets(rows, mapMateriels, log) {
   const refVersId = {}
 
   for (const row of rows) {
-    // La colonne "Items" contient une liste JSON, ex : ["PC-ADM-001"].
-    // L'API haut-niveau ne permet pas de lier le materiel au ticket, donc on
-    // ajoute simplement l'info dans la description.
-    let materiels = ''
-    if (row.Items) {
-      try {
-        const liste = JSON.parse(row.Items)
-        materiels = '\n\nMateriel concerne : ' + liste.join(', ')
-      } catch (e) {
-        materiels = '\n\nMateriel concerne : ' + row.Items
-      }
-    }
+    const priorite = correspondance(PRIORITE, row.Priority, 'Priority')
 
-    // Remarque : dans l'API GLPI 2.3, le "status" d'un ticket est en lecture
-    // seule a la creation (GLPI met automatiquement le statut "Nouveau").
-    // On ne l'envoie donc pas. La colonne Status du CSV reste informative.
-    const body = {
+    const input = {
       name: row.Titre,
-      content: (row.Description || '') + materiels,
+      content: row.Description || '',
       type: correspondance(TYPE_TICKET, row.Type, 'Type'),
-      priority: correspondance(PRIORITE, row.Priority, 'Priority'),
-      date: dateGlpi(row.Date, row.Heure),
-      external_id: String(row.Ref_Ticket) // sert a retrouver le ticket pour ses couts
+      status: correspondance(STATUT_TICKET, row.Status, 'Status'),
+      urgency: priorite,
+      impact: priorite,
+      priority: priorite,
+      date: dateGlpi(row.Date, row.Heure)
     }
 
-    const cree = await ticket.create(body)
+    const cree = await ticket.create(input)
     refVersId[row.Ref_Ticket] = cree.id
     log('  + Ticket importe : #' + row.Ref_Ticket + ' ' + row.Titre)
+
+    // Rattachement REEL des materiels listes dans la colonne "Items".
+    if (row.Items) {
+      let noms = []
+      try {
+        noms = JSON.parse(row.Items) // ex : ["PC-ADM-001","MN-FORM-002"]
+      } catch (e) {
+        noms = []
+      }
+      for (const nom of noms) {
+        const materiel = mapMateriels[nom]
+        if (materiel) {
+          await itemTicket.create(cree.id, materiel.itemtype, materiel.id)
+          log('     materiel rattache : ' + nom)
+        } else {
+          log('     ATTENTION : materiel "' + nom + '" introuvable, lien ignore.')
+        }
+      }
+    }
   }
 
   return refVersId
@@ -172,23 +183,25 @@ async function importerCouts(rows, refVersId, log) {
       throw new Error('Le cout fait reference au ticket #' + row.Num_Ticket + ' qui n\'existe pas.')
     }
 
-    const body = {
+    const input = {
+      tickets_id: ticketId,
       name: 'Cout ticket #' + row.Num_Ticket,
-      duration: nombrePositif(row.Duration_second, 'Duration_second'),
+      actiontime: nombrePositif(row.Duration_second, 'Duration_second'),
       cost_time: nombrePositif(row.Time_Cost, 'Time_Cost'),
       cost_fixed: nombrePositif(row.Fixed_Cost, 'Fixed_Cost')
     }
 
-    await ticketCost.create(ticketId, body)
+    await ticketCost.create(input)
     log('  + Cout importe pour le ticket #' + row.Num_Ticket)
   }
 }
 
 // ----------------------------------------------------------------------------
 // Fonction principale appelee par la page d'import.
-// Elle recoit le CONTENU (texte) des 3 fichiers CSV.
+//   texte1/2/3 : contenu des 3 CSV
+//   images     : table { nomMateriel : fichierImage }  (peut etre vide)
 // ----------------------------------------------------------------------------
-export async function runImport({ texte1, texte2, texte3 }, log = () => {}) {
+export async function runImport({ texte1, texte2, texte3, images = {} }, log = () => {}) {
   try {
     // --- 1. Lecture + verification des colonnes ---
     const feuille1 = parseCsv(texte1)
@@ -201,10 +214,10 @@ export async function runImport({ texte1, texte2, texte3 }, log = () => {}) {
 
     // --- 2. Import dans l'ordre ---
     log('Import des materiels...')
-    await importerMateriels(feuille1.rows, log)
+    const mapMateriels = await importerMateriels(feuille1.rows, images, log)
 
     log('Import des tickets...')
-    const refVersId = await importerTickets(feuille2.rows, log)
+    const refVersId = await importerTickets(feuille2.rows, mapMateriels, log)
 
     log('Import des couts...')
     await importerCouts(feuille3.rows, refVersId, log)
