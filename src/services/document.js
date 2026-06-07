@@ -11,7 +11,7 @@
 // (table glpi_documents_items) : documents_id, itemtype, items_id.
 // ============================================================================
 
-import { post, postMultipart } from './api.js'
+import { get, post, postMultipart, getBlob } from './api.js'
 
 // 1. Envoie le fichier dans GLPI et renvoie l'id du Document cree.
 export async function upload(file, name) {
@@ -46,4 +46,30 @@ export async function uploadAndLink(file, name, itemtype, itemsId) {
   const documentId = await upload(file, name)
   await link(documentId, itemtype, itemsId)
   return documentId
+}
+
+// ----------------------------------------------------------------------------
+// Lecture : recuperer les documents rattaches a un materiel.
+// ----------------------------------------------------------------------------
+
+// 3. Liste les id des documents lies a un materiel (Computer/53, Monitor/2 ...).
+//    GLPI expose la sous-ressource "/{itemtype}/{id}/Document_Item/".
+export async function getItemDocumentIds(itemtype, itemsId) {
+  const liens = await get('/' + itemtype + '/' + itemsId + '/Document_Item/')
+  if (!Array.isArray(liens)) return []
+  return liens.map((lien) => lien.documents_id).filter(Boolean)
+}
+
+// 4. Telecharge le fichier d'un document et renvoie une URL affichable
+//    (objet blob, utilisable directement dans <img src="...">).
+export async function getDocumentImageUrl(documentId) {
+  const blob = await getBlob('/Document/' + documentId)
+  return URL.createObjectURL(blob)
+}
+
+// 5. Pratique : URL de la premiere image rattachee a un materiel, ou null.
+export async function getItemImageUrl(itemtype, itemsId) {
+  const ids = await getItemDocumentIds(itemtype, itemsId)
+  if (ids.length === 0) return null
+  return getDocumentImageUrl(ids[0])
 }

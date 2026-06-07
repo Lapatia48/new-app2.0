@@ -12,6 +12,7 @@
 
 import * as parcElement from './parcElement.js'
 import { getImageUrl } from './images.js'
+import { getItemImageUrl } from './document.js'
 
 // Avec expand_dropdowns, un champ vide revient sous la forme "&nbsp;".
 // Cette fonction renvoie une valeur propre (ou '' si vide).
@@ -37,7 +38,10 @@ function versElement(brut, def) {
     model: '',
     inventory: '',
     contact: '',
-    image: getImageUrl(brut.name) // miniature locale si elle existe
+    // Image affichee. Par defaut la miniature locale (si elle existe) sert de
+    // repli ; elle est ensuite remplacee par l'image reellement stockee dans
+    // GLPI (GET documents) quand le materiel en possede une.
+    image: getImageUrl(brut.name)
   }
 
   for (const champ of def.fields) {
@@ -48,6 +52,8 @@ function versElement(brut, def) {
 }
 
 // Renvoie tous les elements du parc (tous types confondus) dans une seule liste.
+// Pour chaque element, on va aussi chercher l'image reellement rattachee dans
+// GLPI (GET documents) et on l'utilise comme miniature.
 export async function getAllElements() {
   let elements = []
 
@@ -60,6 +66,19 @@ export async function getAllElements() {
       // est simplement ignore : il ne doit pas casser toute la liste.
     }
   }
+
+  // Recuperation des images GLPI en parallele. Un echec (pas de document,
+  // droits manquants...) laisse simplement l'image de repli en place.
+  await Promise.all(
+    elements.map(async (el) => {
+      try {
+        const url = await getItemImageUrl(el.type, el.id)
+        if (url) el.image = url
+      } catch (e) {
+        // on garde l'image de repli (locale ou aucune)
+      }
+    })
+  )
 
   return elements
 }

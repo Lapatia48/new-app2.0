@@ -119,6 +119,33 @@ export function del(path) {
 }
 
 // ----------------------------------------------------------------------------
+// getBlob : telechargement du CONTENU binaire d'une ressource (fichier d'un
+// Document). GLPI renvoie le fichier brut quand on demande
+// "Accept: application/octet-stream". On recupere donc un Blob (et non du JSON)
+// utilisable directement comme source d'une <img> via URL.createObjectURL.
+// ----------------------------------------------------------------------------
+export async function getBlob(path) {
+  await getSession()
+
+  const options = { method: 'GET', headers: entetes({ Accept: 'application/octet-stream' }) }
+
+  let response = await fetch(BASE + path, options)
+
+  // Session expiree : on se reconnecte une fois et on reessaie.
+  if (response.status === 401) {
+    await initSession()
+    options.headers = entetes({ Accept: 'application/octet-stream' })
+    response = await fetch(BASE + path, options)
+  }
+
+  if (!response.ok) {
+    throw new Error('GET (blob) ' + path + ' a echoue (HTTP ' + response.status + ') : ' + (await response.text()))
+  }
+
+  return response.blob()
+}
+
+// ----------------------------------------------------------------------------
 // postMultipart : envoi de fichier (upload de Document).
 // On laisse le navigateur poser le bon Content-Type (avec la "boundary"),
 // donc on ne le met PAS nous-memes.
