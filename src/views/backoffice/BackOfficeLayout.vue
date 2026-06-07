@@ -15,6 +15,21 @@
 </template>
 
 <script setup>
+// ============================================================================
+// BackOfficeLayout.vue
+// ----------------------------------------------------------------------------
+// "Layout" = le cadre commun a toutes les pages du BackOffice (le menu du
+// haut). Vue Router affiche la page demandee a la place de <RouterView/>,
+// un peu comme une "fenetre" qui change de contenu selon l'URL, pendant que
+// le menu, lui, reste toujours affiche.
+//
+// Cette page n'a pas de donnees ni de logique : juste les deux composants
+// fournis par Vue Router et utilises dans le <template> ci-dessus.
+// ============================================================================
+
+// RouterLink = lien de navigation interne (genere un <a>, change de page
+// sans recharger tout le site).
+// RouterView  = "trou" dans la mise en page ou s'affiche la page courante.
 import { RouterLink, RouterView } from 'vue-router'
 </script>
 

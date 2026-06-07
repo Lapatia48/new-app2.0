@@ -42,22 +42,46 @@
 </template>
 
 <script setup>
+// ============================================================================
+// AddCostPage.vue
+// ----------------------------------------------------------------------------
+// Page "Ajouter un cout" (FrontOffice) : un formulaire qui permet d'associer
+// un cout (duree + cout temps + cout fixe) a un ticket existant. La page
+// charge d'abord la liste des tickets (pour remplir le menu deroulant), puis
+// envoie le formulaire via le service ticketCost.create().
+//
+// Rappel : ref(valeur) cree une "boite" reactive lue/modifiee via ".value"
+// dans le script ; v-model sur un <input>/<select> relie automatiquement sa
+// valeur a une ref (l'utilisateur tape -> la ref se met a jour, et inversement).
+// onMounted(fn) execute fn une fois la page affichee : ideal pour charger les
+// donnees initiales (ici, la liste des tickets).
+// ============================================================================
+
 import { ref, onMounted } from 'vue'
 import { getAll } from '../../services/ticket.js'
 import { create } from '../../services/ticketCost.js'
 
+// Liste des tickets pour remplir le <select> du formulaire.
 const tickets = ref([])
 const chargementTickets = ref(true)
 
+// Champs du formulaire, relies aux <input>/<select> via v-model. Ils sont
+// initialises a une chaine vide '' (et non 0) pour que les champs <input>
+// affichent un placeholder vide au depart plutot qu'un "0".
 const ticketId = ref('')
 const durationSecond = ref('')
 const timeCost = ref('')
 const fixedCost = ref('')
 
+// Etats d'affichage : enCours desactive le bouton pendant l'envoi ; message
+// + messageErreur pilotent le texte et la couleur (succes/erreur) affiches
+// en haut de page (cf :class="messageErreur ? 'erreur' : 'succes'" dans le <template>).
 const enCours = ref(false)
 const message = ref('')
 const messageErreur = ref(false)
 
+// Chargement de la liste des tickets des l'affichage de la page (necessaire
+// pour remplir le menu deroulant "Ticket *" du formulaire).
 onMounted(async () => {
   try {
     tickets.value = await getAll()
@@ -69,12 +93,17 @@ onMounted(async () => {
   }
 })
 
+// Declenchee a la soumission du formulaire (@submit.prevent="ajouterCout" :
+// ".prevent" empeche le rechargement de page par defaut d'un <form> HTML).
 async function ajouterCout() {
   enCours.value = true
   message.value = ''
   messageErreur.value = false
 
   try {
+    // Les <input type="number"> renvoient du TEXTE via v-model (ex: "600"),
+    // pas un nombre : Number(...) convertit explicitement en valeur numerique
+    // avant de l'envoyer a l'API GLPI (qui attend des nombres).
     const body = {
       name: 'Cout ticket #' + ticketId.value,
       duration: Number(durationSecond.value),
@@ -85,6 +114,7 @@ async function ajouterCout() {
     await create(ticketId.value, body)
     message.value = 'Cout ajoute avec succes pour le ticket #' + ticketId.value + '.'
 
+    // On vide le formulaire pour permettre une nouvelle saisie immediate.
     ticketId.value = ''
     durationSecond.value = ''
     timeCost.value = ''
@@ -93,6 +123,7 @@ async function ajouterCout() {
     message.value = 'Erreur lors de l\'ajout : ' + e.message
     messageErreur.value = true
   } finally {
+    // Toujours execute (succes ou erreur) : on reactive le bouton.
     enCours.value = false
   }
 }

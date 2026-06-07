@@ -47,10 +47,28 @@
 </template>
 
 <script setup>
+// ============================================================================
+// ImportPage.vue
+// ----------------------------------------------------------------------------
+// Page "Importer les donnees" : l'utilisateur choisit 3 fichiers CSV (dans un
+// ordre precis : materiels, tickets, couts) + une archive .zip d'images
+// (optionnelle), puis clique sur "Lancer l'import". Le vrai travail d'import
+// (lecture des CSV, creation des objets dans GLPI...) est fait par le service
+// runImport() ; cette page se contente de recuperer les fichiers choisis,
+// d'appeler le service et d'afficher sa progression dans un journal.
+//
+// Rappel rapide sur ref() : ref(valeur) cree une "boite" reactive. On la lit
+// et on la modifie via ".value" dans le script (ex: enCours.value = true) ;
+// dans le <template>, Vue enleve automatiquement le ".value".
+// computed(fn) calcule une valeur derivee d'autres refs et se recalcule
+// automatiquement des que l'une d'elles change.
+// ============================================================================
+
 import { ref, computed } from 'vue'
 import { runImport } from '../../services/importData.js'
 
-// Contenu (texte) des 3 CSV une fois choisis par l'utilisateur.
+// Contenu (texte) des 3 CSV une fois choisis par l'utilisateur. On part de
+// `null` pour bien distinguer "fichier pas encore choisi" de "fichier vide".
 const texte1 = ref(null)
 const texte2 = ref(null)
 const texte3 = ref(null)
@@ -58,19 +76,33 @@ const texte3 = ref(null)
 // Archive .zip des images choisie par l'utilisateur (dezippee pendant l'import).
 const zipImages = ref(null)
 
-// Noms affiches a l'ecran.
+// Noms de fichiers affiches a l'ecran (juste pour informer l'utilisateur de
+// ce qu'il a selectionne ; n'a aucun impact sur l'import lui-meme).
 const nomFichier1 = ref('')
 const nomFichier2 = ref('')
 const nomFichier3 = ref('')
 const nomFichierImages = ref('')
 
+// enCours : desactive le bouton et affiche "Import en cours..." pendant le
+// traitement. journal : liste des messages affiches a l'ecran au fur et a
+// mesure (cf fonction log() plus bas et runImport qui l'appelle).
 const enCours = ref(false)
 const journal = ref([])
 
-// On a besoin des 3 CSV pour lancer l'import (les images sont optionnelles).
+// Le bouton "Lancer l'import" reste desactive tant que les 3 CSV ne sont pas
+// choisis (l'archive d'images est optionnelle, donc absente de ce test).
+// "texte1.value && texte2.value && texte3.value" vaut "vrai" seulement si
+// les 3 valeurs sont "remplies" (ni null, ni chaine vide).
 const toutEstLa = computed(() => texte1.value && texte2.value && texte3.value)
 
-// Lit le fichier CSV choisi et garde son contenu texte.
+// Appelee quand l'utilisateur choisit un des 3 fichiers CSV (voir @change
+// dans le <template>). "numero" (1, 2 ou 3) indique quelle ref remplir.
+//
+// evenement.target.files[0] = le 1er fichier choisi dans le champ <input
+// type="file">. fichier.text() lit son contenu et renvoie une "Promise"
+// (une valeur "pas encore prete" mais qu'on recuperera plus tard) : c'est
+// pour ca que la fonction est "async" et qu'on utilise "await" pour
+// attendre que la lecture du fichier soit terminee avant de continuer.
 async function choisirCsv(evenement, numero) {
   const fichier = evenement.target.files[0]
   if (!fichier) return
@@ -83,6 +115,8 @@ async function choisirCsv(evenement, numero) {
 
 // On garde simplement l'archive choisie : c'est runImport qui la dezippe et
 // y cherche les images au moment de l'import (cf services/imagesZip.js).
+// Pas besoin de "async/await" ici : contrairement a un CSV, on ne lit pas
+// le contenu du fichier tout de suite, on le transmet tel quel.
 function choisirImages(evenement) {
   const fichier = evenement.target.files[0]
   if (!fichier) return
@@ -90,14 +124,21 @@ function choisirImages(evenement) {
   nomFichierImages.value = fichier.name
 }
 
+// Ajoute une ligne au journal affiche a l'ecran. Cette fonction est passee
+// en parametre a runImport(), qui l'appelle a chaque etape importante de
+// l'import pour que l'utilisateur voie la progression en temps reel.
 function log(message) {
   journal.value.push(message)
 }
 
+// Declenchee par le clic sur le bouton "Lancer l'import" (@click).
 async function lancerImport() {
   enCours.value = true
   journal.value = []
   try {
+    // On transmet le contenu texte des 3 CSV + l'archive d'images (qui peut
+    // etre null si l'utilisateur ne l'a pas choisie) au service d'import,
+    // ainsi que la fonction log pour qu'il puisse afficher sa progression.
     const resume = await runImport(
       {
         texte1: texte1.value,
@@ -117,6 +158,7 @@ async function lancerImport() {
     // L'erreur a deja ete affichee et le reset a deja ete relance par runImport.
     log('Import annule. Verifiez les fichiers puis recommencez.')
   } finally {
+    // Toujours execute (succes ou erreur) : on reactive le bouton.
     enCours.value = false
   }
 }

@@ -76,28 +76,58 @@
 </template>
 
 <script setup>
+// ============================================================================
+// TicketsPage.vue
+// ----------------------------------------------------------------------------
+// Page "Tickets" du BackOffice : a gauche, la liste de tous les tickets ;
+// a droite, la "fiche" detaillee du ticket selectionne (infos, materiels
+// rattaches, couts). C'est une page "maitre-detail" classique : cliquer sur
+// un element de la liste affiche son detail sans changer de page.
+//
+// Rappel : ref(valeur) cree une "boite" reactive lue/modifiee via ".value"
+// dans le script (Vue enleve automatiquement le ".value" dans le <template>).
+// onMounted(fn) execute fn une fois la page affichee : c'est ici qu'on va
+// chercher les donnees initiales depuis l'API.
+// ============================================================================
+
 import { ref, onMounted } from 'vue'
 import * as ticket from '../../services/ticket.js'
 import * as ticketCost from '../../services/ticketCost.js'
 import * as itemTicket from '../../services/itemTicket.js'
 import { getAllElements } from '../../services/elements.js'
 
+// Liste complete des tickets (colonne de gauche) et ticket actuellement
+// affiche dans la fiche (colonne de droite). "null" = aucun ticket choisi.
 const tickets = ref([])
 const ticketSelectionne = ref(null)
+
+// Donnees du ticket selectionne, rechargees a chaque clic (cf ouvrirFiche).
 const couts = ref([])
 const materiels = ref([])
+
 const enCours = ref(true)
 const erreur = ref('')
 
-// Table { "Computer-5" : "PC-ADM-001" } pour afficher le nom des materiels.
+// Table de correspondance "itemtype-id" -> nom lisible, par exemple :
+//   { "Computer-5": "PC-ADM-001", "Monitor-2": "Ecran-Salle3" }
+// Construite une seule fois au chargement (cf onMounted) pour eviter de
+// redemander les noms a l'API a chaque ouverture de fiche.
 const nomsMateriels = ref({})
 
-// Petites fonctions d'affichage : code GLPI -> texte lisible.
+// --- Petites fonctions de traduction : code GLPI (nombre) -> texte lisible ---
+// GLPI stocke le type/statut/priorite sous forme de nombres ; ces fonctions
+// servent uniquement a l'affichage dans le <template>.
+
 function nomType(type) {
+  // Dans GLPI : 2 = Demande, le reste (en pratique 1) = Incident.
+  // Number(...) convertit la valeur en nombre au cas ou elle arrive en texte.
   return Number(type) === 2 ? 'Demande' : 'Incident'
 }
 
 function nomPriorite(priorite) {
+  // Objet utilise comme "dictionnaire" : la cle est le code GLPI, la valeur
+  // le texte a afficher. "noms[priorite] || priorite" : si le code n'est
+  // pas dans le dictionnaire, on affiche le code brut plutot que "undefined".
   const noms = { 1: 'Tres basse', 2: 'Basse', 3: 'Moyenne', 4: 'Haute', 5: 'Tres haute' }
   return noms[priorite] || priorite
 }
@@ -107,16 +137,27 @@ function nomStatut(statut) {
   return noms[statut] || statut
 }
 
-// Retrouve le nom du materiel a partir du lien Item_Ticket.
+// Retrouve le nom d'un materiel a partir d'un "lien" Item_Ticket (l'objet
+// qui associe un ticket a un materiel : il contient itemtype + items_id,
+// mais PAS le nom). On reconstruit la meme cle que dans nomsMateriels
+// ("Computer-5") pour retrouver le nom correspondant ; si on ne le trouve
+// pas (materiel supprime entre-temps, etc.), on affiche juste son numero.
 function nomMateriel(lien) {
   return nomsMateriels.value[lien.itemtype + '-' + lien.items_id] || ('#' + lien.items_id)
 }
 
+// Appelee quand l'utilisateur clique sur un ticket dans la liste de gauche
+// (@click="ouvrirFiche(t)"). On affiche la fiche immediatement avec les
+// infos deja connues (t), puis on va chercher en plus ses couts et ses
+// materiels rattaches (donnees propres a CE ticket, pas chargees au depart
+// pour ne pas surcharger l'API au premier affichage de la page).
 async function ouvrirFiche(t) {
   ticketSelectionne.value = t
   couts.value = []
   materiels.value = []
   try {
+    // "(... ) || []" : si le service renvoie null/undefined, on retombe sur
+    // un tableau vide pour que le <template> (v-if="couts.length") fonctionne.
     couts.value = (await ticketCost.getAllForTicket(t.id)) || []
     materiels.value = (await itemTicket.getAllForTicket(t.id)) || []
   } catch (e) {
@@ -124,11 +165,14 @@ async function ouvrirFiche(t) {
   }
 }
 
+// Chargement initial au moment ou la page apparait a l'ecran.
 onMounted(async () => {
   try {
     tickets.value = await ticket.getAll()
 
-    // On charge les materiels une fois pour pouvoir afficher leurs noms.
+    // On charge TOUS les materiels une seule fois ici (pas a chaque clic)
+    // uniquement pour construire la table nomsMateriels : ça evite de
+    // redemander les noms a l'API a chaque ouverture de fiche (cf nomMateriel).
     const elements = await getAllElements()
     for (const el of elements) {
       nomsMateriels.value[el.type + '-' + el.id] = el.name

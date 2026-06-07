@@ -12,6 +12,18 @@
 </template>
 
 <script setup>
+// ============================================================================
+// FrontOfficeLayout.vue
+// ----------------------------------------------------------------------------
+// Cadre commun a toutes les pages du FrontOffice (le menu du haut + la zone
+// ou s'affiche la page courante). Identique dans son fonctionnement a
+// BackOfficeLayout.vue : voir ce fichier pour le detail des explications.
+// ============================================================================
+
+// RouterLink = lien de navigation interne (genere un <a>, change de page
+// sans recharger tout le site).
+// RouterView  = "trou" dans la mise en page ou s'affiche la page courante,
+// determinee automatiquement par Vue Router selon l'URL.
 import { RouterLink, RouterView } from 'vue-router'
 </script>
 

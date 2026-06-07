@@ -19,6 +19,17 @@
 </template>
 
 <script setup>
+// ============================================================================
+// BackOfficeHome.vue
+// ----------------------------------------------------------------------------
+// Page d'accueil du BackOffice : c'est juste une page "vitrine" avec des
+// liens (cartes) vers les autres pages. Il n'y a aucune donnee a charger,
+// donc pas de ref/computed/onMounted ici : seulement l'import necessaire
+// pour utiliser <RouterLink> dans le <template> ci-dessus.
+// ============================================================================
+
+// RouterLink = composant fourni par Vue Router qui genere un <a> et change
+// de page SANS recharger tout le site (navigation "cote client").
 import { RouterLink } from 'vue-router'
 </script>
 

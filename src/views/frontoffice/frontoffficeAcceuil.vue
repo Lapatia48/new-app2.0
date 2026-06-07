@@ -14,6 +14,17 @@
 </template>
 
 <script setup>
+// ============================================================================
+// frontoffficeAcceuil.vue
+// ----------------------------------------------------------------------------
+// Page d'accueil du FrontOffice (espace utilisateur final, par opposition au
+// BackOffice qui est reserve a l'administration). Comme BackOfficeHome.vue,
+// c'est une simple page de liens : aucune donnee a charger, donc pas de
+// ref/computed/onMounted.
+// ============================================================================
+
+// RouterLink = lien de navigation interne fourni par Vue Router (change de
+// page sans recharger tout le site).
 import { RouterLink } from 'vue-router'
 </script>
 

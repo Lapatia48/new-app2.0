@@ -58,37 +58,69 @@
 </template>
 
 <script setup>
+// ============================================================================
+// NewTicketPage.vue
+// ----------------------------------------------------------------------------
+// Page "Creer un ticket" (FrontOffice) : formulaire pour creer un ticket
+// d'assistance GLPI (titre, description, type, priorite) et y rattacher
+// plusieurs materiels via des cases a cocher (avec une recherche pour
+// filtrer la longue liste). La creation se fait en DEUX etapes successives :
+//   1) creer le ticket (ticket.create)
+//   2) rattacher chaque materiel coche au ticket cree (itemTicket.create)
+// car l'API GLPI ne permet pas de faire les deux en une seule requete.
+//
+// Rappel : ref(valeur) cree une "boite" reactive lue/modifiee via ".value"
+// dans le script ; v-model relie automatiquement un champ de formulaire a
+// une ref. computed(fn) recalcule sa valeur des qu'une ref utilisee dedans
+// change. onMounted(fn) s'execute une fois la page affichee (chargement initial).
+// ============================================================================
+
 import { ref, computed, onMounted } from 'vue'
 import { getAllElements } from '../../services/elements.js'
 import * as ticket from '../../services/ticket.js'
 import * as itemTicket from '../../services/itemTicket.js'
 
-// Tables de correspondance texte -> code GLPI.
+// Tables de correspondance texte affiche -> code numerique attendu par GLPI.
+// Ce sont des objets utilises comme "dictionnaires" : TYPE_TICKET['Incident']
+// vaut 1, PRIORITE['High'] vaut 4, etc. Cela evite d'ecrire les nombres
+// magiques un peu partout dans le code (plus facile a relire et a maintenir).
 const TYPE_TICKET = { Incident: 1, Request: 2 }
 const PRIORITE = { 'Very Low': 1, Low: 2, Medium: 3, High: 4, 'Very High': 5 }
 
-// Champs du formulaire
+// --- Champs du formulaire, relies aux <input>/<select> via v-model ---
 const titre = ref('')
 const description = ref('')
 const type = ref('Incident')
 const priorite = ref('Medium')
+// "selection" contient les OBJETS elements coches (pas juste leurs id) :
+// v-model="selection" sur des <input type="checkbox" :value="el"> remplit
+// automatiquement ce tableau avec chaque "el" coche. On a besoin de l'objet
+// complet (id + type) pour pouvoir rattacher le materiel au ticket plus tard.
 const selection = ref([]) // elements coches (objets { id, type, name, ... })
 
-// Liste des elements a cocher
+// --- Liste des elements proposes a la selection (cases a cocher) ---
 const elements = ref([])
 const chargementElements = ref(true)
-const recherche = ref('')
+const recherche = ref('') // texte tape pour filtrer la liste de cases a cocher
 
+// Etats d'affichage du formulaire (bouton desactive pendant l'envoi, message
+// de succes/erreur affiche en haut de page).
 const enCours = ref(false)
 const message = ref('')
 const messageErreur = ref(false)
 
+// Liste des elements a cocher APRES filtrage par la recherche. Si la zone
+// de recherche est vide, on affiche tous les elements ; sinon, uniquement
+// ceux dont le nom contient le texte tape (recherche insensible a la casse
+// grace a .toLowerCase() des deux cotes de la comparaison).
 const elementsFiltres = computed(() => {
   const r = recherche.value.trim().toLowerCase()
   if (!r) return elements.value
   return elements.value.filter((el) => el.name.toLowerCase().includes(r))
 })
 
+// Chargement de la liste des elements des l'affichage de la page (necessaire
+// pour proposer les cases a cocher "Elements associes").
 onMounted(async () => {
   try {
     elements.value = await getAllElements()
@@ -100,15 +132,21 @@ onMounted(async () => {
   }
 })
 
+// Declenchee a la soumission du formulaire (@submit.prevent="creerTicket" :
+// ".prevent" empeche le rechargement de page par defaut d'un <form> HTML).
 async function creerTicket() {
   enCours.value = true
   message.value = ''
   messageErreur.value = false
 
   try {
+    // La priorite choisie ('Medium', 'High', ...) est convertie UNE FOIS en
+    // code numerique, puis reutilisee pour 3 champs differents : dans GLPI,
+    // urgency/impact/priority partagent la meme echelle de valeurs (1 a 5).
     const prio = PRIORITE[priorite.value]
 
-    // 1. On cree le ticket.
+    // 1. On cree d'abord le ticket lui-meme (sans les materiels : l'API ne
+    //    permet pas de les associer directement a la creation).
     const input = {
       name: titre.value,
       content: description.value,
@@ -119,7 +157,9 @@ async function creerTicket() {
     }
     const cree = await ticket.create(input)
 
-    // 2. On rattache REELLEMENT chaque element coche au ticket (Item_Ticket).
+    // 2. On rattache REELLEMENT chaque element coche au ticket fraichement
+    //    cree, un par un, via la table de liaison Item_Ticket (sans cette
+    //    etape, le ticket existerait mais n'aurait aucun materiel rattache).
     for (const el of selection.value) {
       await itemTicket.create(cree.id, el.type, el.id)
     }
@@ -128,7 +168,8 @@ async function creerTicket() {
       'Ticket cree avec succes (numero ' + cree.id + '), ' +
       selection.value.length + ' element(s) rattache(s).'
 
-    // On vide le formulaire.
+    // On reinitialise tous les champs pour permettre la creation d'un
+    // nouveau ticket immediatement, sans recharger la page.
     titre.value = ''
     description.value = ''
     type.value = 'Incident'
@@ -139,6 +180,7 @@ async function creerTicket() {
     message.value = 'Erreur lors de la creation : ' + e.message
     messageErreur.value = true
   } finally {
+    // Toujours execute (succes ou erreur) : on reactive le bouton.
     enCours.value = false
   }
 }

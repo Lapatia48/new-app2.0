@@ -16,26 +16,52 @@
 </template>
 
 <script setup>
+// ============================================================================
+// ResetPage.vue
+// ----------------------------------------------------------------------------
+// Page "Reinitialiser les donnees" : un seul gros bouton qui supprime
+// DEFINITIVEMENT tous les tickets et materiels de GLPI (utile avant de
+// relancer un import propre). Le travail de suppression est fait par le
+// service resetAll() ; cette page se contente de demander une confirmation,
+// d'appeler le service et d'afficher sa progression dans un journal.
+// ============================================================================
+
 import { ref } from 'vue'
 import { resetAll } from '../../services/reset.js'
 import * as parcElement from '../../services/parcElement.js'
 
+// enCours : desactive le bouton et change son texte pendant la suppression.
+// journal : liste des lignes affichees a l'ecran (alimentee par log() ci-dessous).
 const enCours = ref(false)
 const journal = ref([])
 
-// Ajoute une ligne au journal affiche a l'ecran.
+// Ajoute une ligne au journal affiche a l'ecran. Cette fonction est passee
+// a resetAll(), qui l'appelle a chaque suppression pour montrer la progression.
 function log(message) {
   journal.value.push(message)
 }
 
+// Declenchee par le clic sur le bouton (@click="lancerReset").
 async function lancerReset() {
+  // confirm(...) ouvre une popup native du navigateur avec OK/Annuler.
+  // Si l'utilisateur clique sur Annuler, confirm() renvoie "false" et on
+  // arrete tout de suite avec "return" : rien n'est supprime.
   if (!confirm('Confirmer la suppression definitive de toutes les donnees ?')) {
     return
   }
   enCours.value = true
   journal.value = []
   try {
+    // resetAll renvoie un resume du type :
+    //   { tickets: 5, materiels: { Computer: 3, Monitor: 2, ... } }
     const resume = await resetAll(log)
+
+    // On construit une phrase recapitulative a partir de ce resume.
+    // parcElement.TYPES est la liste des types geres (avec leur "label"
+    // humain, ex: 'Ordinateur'). Pour chaque type, on va chercher le nombre
+    // correspondant dans resume.materiels et on fabrique un petit texte
+    // comme "3 ordinateur(s)". .join(', ') colle tous ces textes avec une
+    // virgule entre chaque, ex: "3 ordinateur(s), 2 ecran(s)".
     const detailMateriels = parcElement.TYPES
       .map((def) => resume.materiels[def.itemtype] + ' ' + def.label.toLowerCase() + '(s)')
       .join(', ')
@@ -43,6 +69,7 @@ async function lancerReset() {
   } catch (erreur) {
     log('ERREUR : ' + erreur.message)
   } finally {
+    // Toujours execute (succes ou erreur) : on reactive le bouton.
     enCours.value = false
   }
 }
