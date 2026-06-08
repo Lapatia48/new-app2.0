@@ -37,8 +37,16 @@ export const EXPECTED_HEADERS = {
 // Tables de correspondance texte -> code GLPI.
 // ----------------------------------------------------------------------------
 const TYPE_TICKET = { Incident: 1, Request: 2, Demande: 2 }
-const PRIORITE = { 'Very Low': 1, Low: 2, Medium: 3, High: 4, 'Very High': 5 }
-const STATUT_TICKET = { New: 1, Assigned: 2, Planned: 3, Pending: 4, Solved: 5, Closed: 6 }
+const PRIORITE = {
+  'Very Low': 1,
+  Low: 2,
+  Medium: 3,
+  High: 4,
+  'Very High': 5,
+  Critical: 5,
+  Critique: 5
+}
+const STATUT_TICKET = { New: 1, Nouveau: 1, Processing: 2, Assigned: 2, 'In Progress': 2, Planned: 3, Pending: 4, 'En attente': 4, Resolved: 5 ,'Résolu': 5, Solved: 5, Closed: 6 , 'Fermé':6}
 
 // ----------------------------------------------------------------------------
 // Petites fonctions de verification (validations).
@@ -131,18 +139,23 @@ async function importerMateriels(rows, images, log) {
 // ----------------------------------------------------------------------------
 // Etape 2 : import des tickets (feuille2) + vrais liens vers les materiels.
 // Renvoie une table { Ref_Ticket : id_du_ticket }.
+// STRATEGIE : creer les tickets en "New", puis rattacher les materiels, puis
+// les passer a leur statut final. Cela evite les blocages GLPI sur les liens
+// Item_Ticket pour les tickets fermes (qui refusent souvent les modifications).
 // ----------------------------------------------------------------------------
 async function importerTickets(rows, mapMateriels, log) {
   const refVersId = {}
 
   for (const row of rows) {
     const priorite = correspondance(PRIORITE, row.Priority, 'Priority')
+    const statutFinal = correspondance(STATUT_TICKET, row.Status, 'Status')
 
+    // Phase 1 : creer le ticket en "New" (status = 1)
     const input = {
       name: row.Titre,
       content: row.Description || '',
       type: correspondance(TYPE_TICKET, row.Type, 'Type'),
-      status: correspondance(STATUT_TICKET, row.Status, 'Status'),
+      status: 1, // "New" : on passera au statut final apres les rattachements
       urgency: priorite,
       impact: priorite,
       priority: priorite,
@@ -153,7 +166,7 @@ async function importerTickets(rows, mapMateriels, log) {
     refVersId[row.Ref_Ticket] = cree.id
     log('  + Ticket importe : #' + row.Ref_Ticket + ' ' + row.Titre)
 
-    // Rattachement REEL des materiels listes dans la colonne "Items".
+    // Phase 2 : rattacher les materiels PENDANT que le ticket est en "New"
     if (row.Items) {
       let noms = []
       try {
@@ -170,6 +183,12 @@ async function importerTickets(rows, mapMateriels, log) {
           log('     ATTENTION : materiel "' + nom + '" introuvable, lien ignore.')
         }
       }
+    }
+
+    // Phase 3 : passer le ticket a son statut final (ne change que si different de "New")
+    if (statutFinal !== 1) {
+      await ticket.update(cree.id, { status: statutFinal })
+      log('     statut mis a jour')
     }
   }
 
