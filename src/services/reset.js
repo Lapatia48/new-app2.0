@@ -3,18 +3,23 @@
 // ----------------------------------------------------------------------------
 // Reinitialise les donnees : on supprime DEFINITIVEMENT tout ce qui a ete
 // importe (tickets + tous les types d'elements du parc listes dans
-// parc/index.js + les utilisateurs crees par l'import). Les couts d'un ticket
-// sont supprimes automatiquement en meme temps que le ticket.
+// parc/index.js + les utilisateurs crees par l'import + les documents/images).
+// Les couts d'un ticket sont supprimes automatiquement en meme temps que le
+// ticket.
 //
 // ATTENTION utilisateurs : on ne supprime QUE ceux crees par l'import (repere
 // par leur "comment", cf user.js). Les comptes systeme (glpi, tech...) sont
 // epargnes.
+//
+// Documents : ils ne sont PAS supprimes automatiquement avec le materiel ; ils
+// s'accumulent donc a chaque import. Le reset les supprime tous explicitement.
 //
 // "log" est une fonction optionnelle pour afficher l'avancement a l'ecran.
 // ============================================================================
 
 import { ELEMENTS } from './parc/index.js'
 import * as ticket from './ticket.js'
+import * as document from './document.js'
 import User from './user.js'
 import { clearDropdownCache } from './dropdowns.js'
 
@@ -36,6 +41,18 @@ async function supprimerElements(Element, log) {
     log('  - ' + Element.label + ' supprime : ' + (brut.name || brut.designation || brut.id))
   }
   return bruts.length
+}
+
+// Supprime TOUS les documents (les images envoyees pendant l'import). GLPI ne
+// les efface pas tout seul quand on supprime le materiel : ils s'accumuleraient
+// donc a chaque import.
+async function supprimerDocuments(log) {
+  const documents = await document.getAll()
+  for (const doc of documents) {
+    await document.remove(doc.id)
+    log('  - Document supprime : ' + (doc.name || doc.filename || doc.id))
+  }
+  return documents.length
 }
 
 export async function resetAll(log = () => {}) {
@@ -60,11 +77,14 @@ export async function resetAll(log = () => {}) {
   // tech... sont epargnes car ils n'ont pas la marque IMPORT_TAG).
   const utilisateurs = await User.removeImported(log)
 
+  // Suppression de tous les documents (images) restants.
+  const documents = await supprimerDocuments(log)
+
   // Les identifiants des dropdowns et des utilisateurs ne sont plus valables :
   // on vide les caches.
   clearDropdownCache()
   User.clearCache()
 
   log('Reinitialisation terminee.')
-  return { tickets, materiels, utilisateurs }
+  return { tickets, materiels, utilisateurs, documents }
 }

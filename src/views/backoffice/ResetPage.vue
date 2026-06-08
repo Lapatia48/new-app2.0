@@ -2,8 +2,9 @@
   <div class="page">
     <h1>Reinitialiser les donnees</h1>
     <p class="info">
-      Ce bouton supprime DEFINITIVEMENT tous les tickets et tous les elements
-      du parc (ordinateurs, ecrans, cables, cartes SIM...) presents dans GLPI.
+      Ce bouton supprime DEFINITIVEMENT tous les tickets, tous les elements du
+      parc (ordinateurs, ecrans, cables, cartes SIM...), les utilisateurs
+      importes et les documents (images) presents dans GLPI.
       A utiliser avant un nouvel import.
     </p>
 
@@ -67,7 +68,8 @@ async function lancerReset() {
       .map((Element) => resume.materiels[Element.itemtype] + ' ' + Element.label.toLowerCase() + '(s)')
       .join(', ')
     log('Termine : ' + resume.tickets + ' ticket(s), ' + detailMateriels +
-      ', ' + resume.utilisateurs + ' utilisateur(s) supprime(s).')
+      ', ' + resume.utilisateurs + ' utilisateur(s), ' +
+      resume.documents + ' document(s) supprime(s).')
   } catch (erreur) {
     log('ERREUR : ' + erreur.message)
   } finally {
