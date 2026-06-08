@@ -87,10 +87,11 @@
 
 import { ref, computed, onMounted } from 'vue'
 import { getAllElements } from '../../services/elements.js'
-import * as parcElement from '../../services/parcElement.js'
+import { ELEMENTS } from '../../services/parc/index.js'
 
 // Liste des types de materiels geres (pour remplir le menu "Tous les types").
-const typesParc = parcElement.TYPES
+// Chaque entree est une classe d'element : on lit Element.itemtype.
+const typesParc = ELEMENTS
 
 // Tous les elements du parc, charges une seule fois au demarrage (cf onMounted).
 const elements = ref([])

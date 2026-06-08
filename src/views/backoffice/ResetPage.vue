@@ -2,8 +2,9 @@
   <div class="page">
     <h1>Reinitialiser les donnees</h1>
     <p class="info">
-      Ce bouton supprime DEFINITIVEMENT tous les tickets, ordinateurs et ecrans
-      presents dans GLPI. A utiliser avant un nouvel import.
+      Ce bouton supprime DEFINITIVEMENT tous les tickets et tous les elements
+      du parc (ordinateurs, ecrans, cables, cartes SIM...) presents dans GLPI.
+      A utiliser avant un nouvel import.
     </p>
 
     <button class="btn-danger" :disabled="enCours" @click="lancerReset">
@@ -28,7 +29,7 @@
 
 import { ref } from 'vue'
 import { resetAll } from '../../services/reset.js'
-import * as parcElement from '../../services/parcElement.js'
+import { ELEMENTS } from '../../services/parc/index.js'
 
 // enCours : desactive le bouton et change son texte pendant la suppression.
 // journal : liste des lignes affichees a l'ecran (alimentee par log() ci-dessous).
@@ -57,15 +58,16 @@ async function lancerReset() {
     const resume = await resetAll(log)
 
     // On construit une phrase recapitulative a partir de ce resume.
-    // parcElement.TYPES est la liste des types geres (avec leur "label"
-    // humain, ex: 'Ordinateur'). Pour chaque type, on va chercher le nombre
+    // ELEMENTS est la liste des classes d'elements (avec leur "label" humain,
+    // ex: 'Ordinateur'). Pour chaque type, on va chercher le nombre
     // correspondant dans resume.materiels et on fabrique un petit texte
     // comme "3 ordinateur(s)". .join(', ') colle tous ces textes avec une
     // virgule entre chaque, ex: "3 ordinateur(s), 2 ecran(s)".
-    const detailMateriels = parcElement.TYPES
-      .map((def) => resume.materiels[def.itemtype] + ' ' + def.label.toLowerCase() + '(s)')
+    const detailMateriels = ELEMENTS
+      .map((Element) => resume.materiels[Element.itemtype] + ' ' + Element.label.toLowerCase() + '(s)')
       .join(', ')
-    log('Termine : ' + resume.tickets + ' ticket(s), ' + detailMateriels + ' supprime(s).')
+    log('Termine : ' + resume.tickets + ' ticket(s), ' + detailMateriels +
+      ', ' + resume.utilisateurs + ' utilisateur(s) supprime(s).')
   } catch (erreur) {
     log('ERREUR : ' + erreur.message)
   } finally {

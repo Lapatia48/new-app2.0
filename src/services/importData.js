@@ -4,7 +4,9 @@
 // "Chef d'orchestre" de l'import. Le nom des fichiers CSV n'a aucune
 // importance : seul l'ordre dans lequel ils sont deposes determine leur role,
 // et leurs entetes sont verifiees en consequence (cf EXPECTED_HEADERS) :
-//   1. 1er CSV  -> materiels   -> Computer / Monitor  (+ image reelle)
+//   1. 1er CSV  -> materiels   -> tout type de parc selon la colonne Item_Type
+//                                 (Computer, Monitor, Cable, DeviceSimcard...)
+//                                 + image reelle
 //   2. 2e CSV   -> tickets     -> Ticket  (+ vrais liens materiels)
 //   3. 3e CSV   -> couts       -> TicketCost
 //
@@ -13,9 +15,8 @@
 // ============================================================================
 
 import { parseCsv } from './csv.js'
-import { resolveDropdown } from './dropdowns.js'
 import { resetAll } from './reset.js'
-import * as parcElement from './parcElement.js'
+import { elementParType } from './parc/index.js'
 import * as ticket from './ticket.js'
 import * as ticketCost from './ticketCost.js'
 import * as itemTicket from './itemTicket.js'
@@ -90,37 +91,24 @@ async function importerMateriels(rows, images, log) {
   const mapMateriels = {}
 
   for (const row of rows) {
-    // La definition du type (endpoint, dropdown du modele, ...) vient de
-    // parcElements.json : on ne fait plus de if/else par type de materiel.
-    const def = parcElement.TYPES.find((t) => t.itemtype === row.Item_Type)
-    if (!def) {
-      throw new Error('Item_Type inconnu "' + row.Item_Type + '" pour le materiel ' + row.Name + '.')
-    }
+    // On choisit la BONNE classe selon la colonne Item_Type ('Computer',
+    // 'Cable', 'DeviceSimcard'...). Chaque classe connait SON propre payload :
+    // plus de construction generique, donc plus d'erreur 400 sur les types
+    // particuliers (cable, carte SIM...).
+    const Element = elementParType(row.Item_Type)
 
-    // Construction generique du payload : chaque type declare dans
-    // parcElements.json la liste des champs qu'il accepte (un Software n'a
-    // par exemple ni numero d'inventaire ni modele). On boucle donc sur
-    // def.fields au lieu d'ecrire un bloc "champs communs" fige.
-    //   - champ "dropdown"  -> on resout le texte en id GLPI (en le creant au besoin)
-    //   - champ simple      -> on copie la valeur telle quelle
-    const input = {}
-    for (const champ of def.fields) {
-      const valeur = row[champ.csv]
-      if (champ.dropdown) {
-        input[champ.glpi] = await resolveDropdown(champ.dropdown, valeur)
-      } else {
-        input[champ.glpi] = valeur
-      }
-    }
+    // Le constructeur range la ligne CSV dans un objet, puis create() envoie le
+    // payload exact a GLPI et renvoie l'id cree.
+    const materiel = new Element(row)
+    const id = await materiel.create()
 
-    const cree = await parcElement.create(def.itemtype, input)
-    mapMateriels[row.Name] = { itemtype: def.itemtype, id: cree.id }
-    log('  + Materiel importe : ' + row.Name + ' (' + def.itemtype + ')')
+    mapMateriels[row.Name] = { itemtype: Element.itemtype, id }
+    log('  + Materiel importe : ' + row.Name + ' (' + Element.itemtype + ')')
 
     // Image reelle : si une image porte le meme nom, on l'envoie a GLPI.
     const image = images[row.Name]
     if (image) {
-      await uploadAndLink(image, row.Name, def.itemtype, cree.id)
+      await uploadAndLink(image, row.Name, Element.itemtype, id)
       log('     image envoyee : ' + image.name)
     }
   }
