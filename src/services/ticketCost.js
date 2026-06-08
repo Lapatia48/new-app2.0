@@ -15,7 +15,9 @@ export function getAllForTicket(ticketId) {
   return get('/Ticket/' + ticketId + '/TicketCost')
 }
 
-// Ajoute un cout. "input" doit contenir tickets_id + actiontime, cost_time, ...
-export function create(input) {
-  return post(ENDPOINT, input)
+// Ajoute un cout pour le ticket "ticketId". "champs" contient les autres
+// proprietes (name, duration, cost_time, cost_fixed, ...) ; on y ajoute
+// tickets_id pour rattacher le cout au bon ticket.
+export function create(ticketId, champs) {
+  return post(ENDPOINT, { ...champs, tickets_id: ticketId })
 }

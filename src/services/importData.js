@@ -174,15 +174,14 @@ async function importerCouts(rows, refVersId, log) {
       throw new Error('Le cout fait reference au ticket #' + row.Num_Ticket + ' qui n\'existe pas.')
     }
 
-    const input = {
-      tickets_id: ticketId,
+    const champs = {
       name: 'Cout ticket #' + row.Num_Ticket,
       actiontime: nombrePositif(row.Duration_second, 'Duration_second'),
       cost_time: nombrePositif(row.Time_Cost, 'Time_Cost'),
       cost_fixed: nombrePositif(row.Fixed_Cost, 'Fixed_Cost')
     }
 
-    await ticketCost.create(input)
+    await ticketCost.create(ticketId, champs)
     log('  + Cout importe pour le ticket #' + row.Num_Ticket)
   }
 }

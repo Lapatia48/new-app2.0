@@ -106,7 +106,8 @@ async function ajouterCout() {
     // avant de l'envoyer a l'API GLPI (qui attend des nombres).
     const body = {
       name: 'Cout ticket #' + ticketId.value,
-      duration: Number(durationSecond.value),
+      // "actiontime" est le champ GLPI pour la duree (cf importData.js -> importerCouts).
+      actiontime: Number(durationSecond.value),
       cost_time: Number(timeCost.value),
       cost_fixed: Number(fixedCost.value)
     }
