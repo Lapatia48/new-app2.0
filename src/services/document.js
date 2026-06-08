@@ -11,7 +11,9 @@
 // (table glpi_documents_items) : documents_id, itemtype, items_id.
 // ============================================================================
 
-import { get, post, postMultipart, getBlob } from './api.js'
+import { get, post, del, postMultipart, getBlob } from './api.js'
+
+const ENDPOINT = '/Document'
 
 // 1. Envoie le fichier dans GLPI et renvoie l'id du Document cree.
 export async function upload(file, name) {
@@ -72,4 +74,19 @@ export async function getItemImageUrl(itemtype, itemsId) {
   const ids = await getItemDocumentIds(itemtype, itemsId)
   if (ids.length === 0) return null
   return getDocumentImageUrl(ids[0])
+}
+
+// ----------------------------------------------------------------------------
+// Suppression (utilise par le reset).
+// ----------------------------------------------------------------------------
+
+// 6. Liste tous les documents (les images envoyees pendant l'import).
+export function getAll() {
+  return get(ENDPOINT + '?range=0-9999&get_hateoas=false')
+}
+
+// 7. Supprime DEFINITIVEMENT un document (force_purge = pas de corbeille).
+//    GLPI retire automatiquement les liens Document_Item associes.
+export function remove(id) {
+  return del(ENDPOINT + '/' + id + '?force_purge=true')
 }

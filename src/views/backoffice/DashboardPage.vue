@@ -61,13 +61,13 @@
 // ============================================================================
 
 import { ref, computed, onMounted } from 'vue'
-import * as parcElement from '../../services/parcElement.js'
+import { ELEMENTS } from '../../services/parc/index.js'
 import * as ticket from '../../services/ticket.js'
 
-// La liste des types d'elements du parc vient de parcElements.json : ajouter
-// un nouveau type (Printer, ...) ne demande aucune modification ici.
-// Exemple de contenu d'un "def" : { itemtype: 'Computer', label: 'Ordinateur', labelPluriel: 'Ordinateurs' }
-const typesParc = parcElement.TYPES
+// La liste des types d'elements du parc vient de parc/index.js : chaque entree
+// est une CLASSE d'element (Computer, Monitor, Cable...). On lit directement
+// ses constantes statiques : Element.itemtype, Element.label, Element.labelPluriel.
+const typesParc = ELEMENTS
 
 // "materiels" est un OBJET (pas un tableau) qui ressemble a :
 //   { Computer: [], Monitor: [], ... }
@@ -76,9 +76,9 @@ const typesParc = parcElement.TYPES
 // type, rempli plus bas dans onMounted(). Au depart, chaque liste est vide.
 //
 // Object.fromEntries([...]) construit un objet a partir d'une liste de
-// paires [cle, valeur]. Ici on transforme typesParc (un tableau de "def")
+// paires [cle, valeur]. Ici on transforme typesParc (un tableau de classes)
 // en paires [itemtype, []] grace a .map(...).
-const materiels = ref(Object.fromEntries(typesParc.map((def) => [def.itemtype, []])))
+const materiels = ref(Object.fromEntries(typesParc.map((Element) => [Element.itemtype, []])))
 
 // Tableau des tickets recuperes depuis l'API (rempli dans onMounted).
 const tickets = ref([])
@@ -131,11 +131,11 @@ onMounted(async () => {
     // GLPI (0 droit, itemtype absent...) reste a 0 sans casser le tableau.
     // (le try/catch est a l'INTERIEUR de la boucle : si un type echoue,
     // on continue quand meme avec les types suivants)
-    for (const def of typesParc) {
+    for (const Element of typesParc) {
       try {
-        materiels.value[def.itemtype] = await parcElement.getAll(def.itemtype)
+        materiels.value[Element.itemtype] = await Element.getAll()
       } catch (e) {
-        materiels.value[def.itemtype] = []
+        materiels.value[Element.itemtype] = []
       }
     }
     tickets.value = await ticket.getAll()
