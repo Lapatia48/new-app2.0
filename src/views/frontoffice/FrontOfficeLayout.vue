@@ -5,6 +5,7 @@
       <RouterLink :to="{ name: 'frontoffice' }">Accueil</RouterLink>
       <RouterLink :to="{ name: 'fo-elements' }">Elements</RouterLink>
       <RouterLink :to="{ name: 'fo-new-ticket' }">Nouveau ticket</RouterLink>
+      <RouterLink :to="{ name: 'fo-ticket-kaban' }">Ticket kaban</RouterLink>
     </nav>
 
     <RouterView />

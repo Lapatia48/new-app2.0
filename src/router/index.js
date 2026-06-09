@@ -10,6 +10,7 @@ import FrontOfficeLayout from '../views/frontoffice/FrontOfficeLayout.vue'
 import frontoffficeAcceuil from '../views/frontoffice/frontoffficeAcceuil.vue'
 import ElementsPage from '../views/frontoffice/ElementsPage.vue'
 import NewTicketPage from '../views/frontoffice/NewTicketPage.vue'
+import TicketkabanPage from '../views/frontoffice/TicketkabanPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -37,7 +38,8 @@ const router = createRouter({
       children: [
         { path: '', name: 'frontoffice', component: frontoffficeAcceuil },
         { path: 'elements', name: 'fo-elements', component: ElementsPage },
-        { path: 'nouveau-ticket', name: 'fo-new-ticket', component: NewTicketPage }
+        { path: 'nouveau-ticket', name: 'fo-new-ticket', component: NewTicketPage },
+        { path: 'ticketkaban', name:'fo-ticket-kaban', component: TicketkabanPage}
       ]
     }
   ]
