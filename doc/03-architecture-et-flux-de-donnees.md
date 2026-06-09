@@ -155,11 +155,65 @@ Vous retrouverez exactement le meme principe dans `ImportPage.vue` /
 
 Plutot que de coder en dur la liste des types geres (Computer, Monitor...)
 dans chaque page, le projet centralise cette liste dans
-[`src/services/parcElements.json`](../src/services/parcElements.json),
-exposee via `parcElement.TYPES`. Trois pages l'utilisent directement :
+[`src/services/parc/index.js`](../src/services/parc/index.js), qui exporte
+le tableau `ELEMENTS`. Trois pages l'utilisent directement :
 `DashboardPage.vue`, `ElementsPage.vue`, `ResetPage.vue`.
 
-**Consequence pratique tres importante** : pour ajouter un nouveau type de
-materiel gere par l'application (par exemple "Printer"), **il suffit
-d'ajouter une entree dans ce fichier JSON** — aucune des pages n'a besoin
-d'etre modifiee. Voir la recette correspondante dans le fichier 05.
+Chaque type de materiel est **une classe JavaScript independante** dans son
+propre fichier (`parc/computer.js`, `parc/cable.js`, `parc/monitor.js`...).
+Toutes suivent le meme contrat :
+
+```
+class Computer {
+  static itemtype = 'Computer'     // code GLPI (utilise dans les URLs)
+  static label = 'Ordinateur'      // nom singulier affiche
+  static labelPluriel = 'Ordinateurs'
+
+  constructor(row) { ... }         // lit une ligne de CSV
+  async toInput() { ... }          // construit le payload GLPI
+  async create() { ... }           // POST + renvoie l'id
+
+  static getAll(options) { ... }   // GET liste
+  static getOne(id) { ... }        // GET un seul
+  static remove(id) { ... }        // DELETE force_purge
+  static toDisplay(brut) { ... }   // GLPI brut -> objet d'affichage uniforme
+}
+```
+
+`toDisplay()` est important : il normalise les champs (tous les types
+renvoient les memes cles `name`, `status`, `location`, `contact`, etc.)
+pour que `ElementsPage.vue` n'ait pas besoin de savoir quel type il affiche.
+
+Types actuellement geres (dans l'ordre d'affichage) :
+`Computer`, `Monitor`, `NetworkEquipment`, `Peripheral`, `Printer`, `Phone`,
+`Rack`, `Enclosure`, `PDU`, `PassiveDCEquipment`, `Software`, `CartridgeItem`,
+`ConsumableItem`, `Cable`, `DeviceSimcard`.
+
+**Pour ajouter un nouveau type** : creer son fichier (ex: `parc/scanner.js`)
+puis l'ajouter dans le tableau `ELEMENTS` de `parc/index.js`. Aucune page
+n'a besoin d'etre modifiee. Voir la recette dans le fichier 05.
+
+## 3.7 Deuxieme backend : Spring Boot (dossier `eval/`)
+
+En plus de GLPI, le projet utilise un **deuxieme serveur** (Java/Spring Boot)
+pour stocker la **personnalisation du tableau Kanban** dans une base SQLite
+locale :
+
+```
+src/services/kanbanConfig.js   -->  GET/POST http://localhost:8080/api/kanban-config
+                                           (serveur Spring Boot, dossier eval/)
+eval/src/main/java/com/eval/eval/
+  bdd/ConnexionBdd.java          connexion SQLite (un seul endroit)
+  entity/KanbanConfig.java       objet metier (id, couleurs, noms, langue)
+  repository/KanbanConfigRepository.java  CRUD : getAll, getById, save, update, delete
+  service/KanbanConfigService.java        logique metier
+  controller/KanbanConfigController.java  routes /api/kanban-config
+eval/src/main/resources/static/kanban-config.html   page de personnalisation
+```
+
+Ce second serveur suit l'architecture classique Spring Boot debutant :
+`Controller -> Service -> Repository -> ConnexionBdd -> SQLite`.
+
+Il est independant du reste du site : si il est eteint, le Kanban affiche
+les couleurs et noms de statut par defaut (definis dans `kanbanConfig.js`).
+La variable `.env` `VITE_KANBAN_CONFIG_BASE` pointe vers son adresse.

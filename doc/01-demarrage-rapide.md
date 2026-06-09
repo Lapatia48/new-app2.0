@@ -2,6 +2,11 @@
 
 ## Lancer le projet en local
 
+Ce projet utilise **deux serveurs independants** qui doivent tourner en meme
+temps.
+
+### 1) Serveur Vue (le site lui-meme)
+
 ```sh
 npm install     # installe les dependances (a faire une seule fois, ou apres
                 # chaque modification de package.json)
@@ -10,6 +15,26 @@ npm run dev     # lance le serveur de developpement (rechargement automatique)
 
 Le terminal affiche une adresse du type `http://localhost:5173` : ouvrez-la
 dans votre navigateur.
+
+### 2) Backend Spring Boot (personnalisation du tableau Kanban)
+
+Un second serveur Java tourne dans le dossier `eval/`. Il stocke les
+couleurs et les noms de statut du tableau Kanban dans une base SQLite locale.
+
+```sh
+cd eval
+mvn spring-boot:run   # ATTENTION : "spring-boot" avec un tiret, pas "springboot"
+```
+
+Il demarre sur `http://localhost:8080`. La page de personnalisation est
+accessible a `http://localhost:8080/kanban-config.html`.
+
+> Si ce second serveur est eteint, le tableau Kanban reste utilisable avec
+> les couleurs et noms par defaut : ce n'est pas bloquant pour le reste du
+> site, seulement pour la personalisation.
+>
+> Architecture du backend Spring Boot : voir `eval/src/main/java/com/eval/eval/`
+> (package `bdd`, `entity`, `repository`, `service`, `controller`).
 
 Autres commandes utiles (definies dans `package.json`, section `scripts`) :
 
@@ -42,6 +67,10 @@ VITE_GLPI_PASSWORD=glpi
 
 # Jeton de l'application cote GLPI (Configuration > Generale > API)
 VITE_GLPI_APP_TOKEN=xxxxxxxxxxxxxxxx
+
+# Adresse du backend Spring Boot (dossier eval/) pour la personnalisation Kanban
+# Laisser a http://localhost:8080 si le serveur eval tourne localement.
+VITE_KANBAN_CONFIG_BASE=http://localhost:8080
 ```
 
 **Comment ces variables arrivent dans le code ?**
