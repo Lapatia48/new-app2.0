@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configuration du tableau Kanban</title>
+
+    <!--
+        Page de personnalisation du tableau Kanban.
+        Tout est dans un seul fichier (HTML + CSS + JavaScript) pour rester
+        simple a lire pour un debutant. Cette page est servie par Spring Boot
+        a l'adresse :  http://localhost:8080/kanban-config.html
+    -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 640px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            color: #1f2937;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+        }
+
+        .ligne {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 0.8rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+
+        .ligne .titre {
+            width: 130px;
+            font-weight: 600;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 0.2rem;
+        }
+
+        input[type="text"],
+        select {
+            padding: 0.45rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+
+        input[type="color"] {
+            width: 48px;
+            height: 38px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: none;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 0.7rem 1.4rem;
+            border: none;
+            border-radius: 6px;
+            background: #2563eb;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        /* Quand un bouton est desactive (pendant l'enregistrement) : grise. */
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Le bouton "Reinitialiser" est secondaire : fond gris, plus discret. */
+        .btn-secondaire {
+            background: #6b7280;
+        }
+
+        /* Zone qui regroupe les boutons cote a cote. */
+        .actions {
+            display: flex;
+            gap: 0.6rem;
+            align-items: center;
+        }
+
+        #message {
+            margin-top: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Petit rond qui tourne (loading), affiche pendant l'enregistrement. */
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #cbd5e1;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            display: inline-block;
+            animation: tourner 0.7s linear infinite;
+        }
+
+        @keyframes tourner {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Configuration du tableau Kanban</h1>
+    <p>Choisissez la langue des entetes, la couleur de fond et le nom en malgache de chaque colonne.</p>
+
+    <!-- Langue de l'entete des colonnes (un seul choix pour tout le tableau) -->
+    <div class="ligne">
+        <span class="titre">Langue entete</span>
+        <div>
+            <label>Langue affichee en haut des colonnes</label>
+            <select id="langue">
+                <option value="mg">Malgache (vaovao, efa manao, vita)</option>
+                <option value="en">Anglais (New, In progress, Done)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Colonne "Nouveau" -->
+    <div class="ligne">
+        <span class="titre">Nouveau</span>
+        <div>
+            <label>Couleur de fond</label>
+            <input type="color" id="couleurNouveau" />
+        </div>
+        <div>
+            <label>Nom en malgache</label>
+            <input type="text" id="nomMgNouveau" placeholder="vaovao" />
+        </div>
+    </div>
+
+    <!-- Colonne "In progress" -->
+    <div class="ligne">
+        <span class="titre">In progress</span>
+        <div>
+            <label>Couleur de fond</label>
+            <input type="color" id="couleurEncours" />
+        </div>
+        <div>
+            <label>Nom en malgache</label>
+            <input type="text" id="nomMgEncours" placeholder="efa manao" />
+        </div>
+    </div>
+
+    <!-- Colonne "Termine" -->
+    <div class="ligne">
+        <span class="titre">Termine</span>
+        <div>
+            <label>Couleur de fond</label>
+            <input type="color" id="couleurTermine" />
+        </div>
+        <div>
+            <label>Nom en malgache</label>
+            <input type="text" id="nomMgTermine" placeholder="vita" />
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="boutonEnregistrer">Enregistrer</button>
+        <!-- Remet les couleurs ET les entetes (noms + langue) d'origine dans
+             le formulaire. Il faut ensuite cliquer "Enregistrer" pour appliquer. -->
+        <button id="boutonReset" class="btn-secondaire" type="button">Reinitialiser couleur de base</button>
+    </div>
+    <p id="message"></p>
+
+    <script>
+        // ====================================================================
+        // JavaScript de la page (commente pour un debutant).
+        // ATTENTION : un <input type="color"> n'accepte QUE des couleurs au
+        // format hexadecimal "#rrggbb". On enregistre donc les couleurs dans
+        // ce format dans SQLite.
+        // ====================================================================
+
+        // Adresse du backend (ici la meme appli Spring Boot, donc chemin relatif).
+        const URL_API = "/api/kanban-config";
+
+        // Valeurs d'ORIGINE (les memes que celles inserees par le backend la
+        // toute premiere fois, cf KanbanConfigRepository.java). Le bouton
+        // "Reinitialiser" remet ces valeurs dans le formulaire.
+        const DEFAUT = {
+            couleurNouveau: "#dbeafe",
+            couleurEncours: "#fde7c8",
+            couleurTermine: "#d7f0dc",
+            nomMgNouveau: "vaovao",
+            nomMgEncours: "efa manao",
+            nomMgTermine: "vita",
+            langue: "mg"
+        };
+
+        // Petit utilitaire : "attendre(1000)" renvoie une promesse qui se
+        // termine apres 1000 millisecondes (1 seconde). Sert a afficher le
+        // loading pendant un court instant meme si le serveur repond tres vite.
+        function attendre(millisecondes) {
+            return new Promise((resoudre) => setTimeout(resoudre, millisecondes));
+        }
+
+        // Remplit tous les champs du formulaire avec un objet de configuration.
+        function remplirFormulaire(config) {
+            document.getElementById("couleurNouveau").value = config.couleurNouveau;
+            document.getElementById("couleurEncours").value = config.couleurEncours;
+            document.getElementById("couleurTermine").value = config.couleurTermine;
+            document.getElementById("nomMgNouveau").value = config.nomMgNouveau;
+            document.getElementById("nomMgEncours").value = config.nomMgEncours;
+            document.getElementById("nomMgTermine").value = config.nomMgTermine;
+            // Langue : "mg" par defaut si jamais elle est absente.
+            document.getElementById("langue").value = config.langue || "mg";
+        }
+
+        // ------------------------------------------------------------------
+        // 1) Au chargement de la page : on va chercher la config existante
+        //    et on remplit les champs du formulaire avec ses valeurs.
+        // ------------------------------------------------------------------
+        async function chargerConfig() {
+            const reponse = await fetch(URL_API);          // GET
+            const config = await reponse.json();           // transforme le JSON en objet
+            remplirFormulaire(config);
+        }
+
+        // ------------------------------------------------------------------
+        // 2) Au clic sur "Enregistrer" : on lit les champs, on construit un
+        //    objet, et on l'envoie au backend (qui l'ecrit dans SQLite).
+        //    On affiche un petit "loading" pendant au moins 1 seconde pour
+        //    que l'utilisateur voie clairement que le changement est en cours.
+        // ------------------------------------------------------------------
+        async function enregistrerConfig() {
+            const message = document.getElementById("message");
+            const boutonEnregistrer = document.getElementById("boutonEnregistrer");
+            const boutonReset = document.getElementById("boutonReset");
+
+            // On rassemble les valeurs saisies dans un objet JavaScript.
+            const config = {
+                couleurNouveau: document.getElementById("couleurNouveau").value,
+                couleurEncours: document.getElementById("couleurEncours").value,
+                couleurTermine: document.getElementById("couleurTermine").value,
+                nomMgNouveau: document.getElementById("nomMgNouveau").value,
+                nomMgEncours: document.getElementById("nomMgEncours").value,
+                nomMgTermine: document.getElementById("nomMgTermine").value,
+                langue: document.getElementById("langue").value
+            };
+
+            // Phase "loading" : on desactive les boutons et on affiche un petit
+            // rond qui tourne avec le texte "Enregistrement en cours...".
+            boutonEnregistrer.disabled = true;
+            boutonReset.disabled = true;
+            message.style.color = "#374151";
+            message.innerHTML = '<span class="spinner"></span> Enregistrement en cours...';
+
+            try {
+                // On envoie l'objet en JSON au backend (POST) ET on attend au
+                // moins 1 seconde : Promise.all attend que les DEUX soient finis,
+                // donc le loading reste visible meme si le serveur repond vite.
+                const [reponse] = await Promise.all([
+                    fetch(URL_API, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(config)
+                    }),
+                    attendre(1000)
+                ]);
+
+                // On affiche un petit message selon que ca a marche ou non.
+                if (reponse.ok) {
+                    message.style.color = "#027a48";
+                    message.textContent = "Configuration enregistree !";
+                } else {
+                    message.style.color = "#b42318";
+                    message.textContent = "Erreur lors de l'enregistrement.";
+                }
+            } catch (e) {
+                // Erreur reseau (backend eteint, etc.).
+                message.style.color = "#b42318";
+                message.textContent = "Erreur reseau : le backend repond-il ?";
+            } finally {
+                // Dans tous les cas, on reactive les boutons.
+                boutonEnregistrer.disabled = false;
+                boutonReset.disabled = false;
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 3) Au clic sur "Reinitialiser" : on remet les valeurs d'origine
+        //    (couleurs + noms + langue) DANS LE FORMULAIRE. Rien n'est encore
+        //    enregistre : il faut cliquer "Enregistrer" pour appliquer.
+        // ------------------------------------------------------------------
+        function reinitialiser() {
+            remplirFormulaire(DEFAUT);
+            const message = document.getElementById("message");
+            message.style.color = "#374151";
+            message.textContent = "Valeurs d'origine restaurees. Cliquez sur \"Enregistrer\" pour appliquer.";
+        }
+
+        // On relie les boutons a leurs fonctions.
+        document.getElementById("boutonEnregistrer").addEventListener("click", enregistrerConfig);
+        document.getElementById("boutonReset").addEventListener("click", reinitialiser);
+
+        // On lance le chargement initial des que la page est prete.
+        chargerConfig();
+    </script>
+</body>
+
+</html>

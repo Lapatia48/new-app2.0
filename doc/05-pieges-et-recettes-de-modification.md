@@ -92,24 +92,75 @@ de ticket (`NewTicketPage.vue`).
 
 ---
 
-## 5.3 Recette : ajouter un nouveau type de materiel (ex: "Printer")
+## 5.3 Recette : ajouter un nouveau type de materiel (ex: "Scanner")
 
-Grace au design centralise de `parcElements.json` (voir section 3.6),
-**aucune page n'a besoin d'etre modifiee**. Il suffit d'ajouter une entree
-dans [`src/services/parcElements.json`](../src/services/parcElements.json),
-en suivant le modele des entrees existantes (regardez `Computer` ou
-`Monitor` comme exemple : `itemtype`, `endpoint`, `label`, `labelPluriel`,
-et les autres champs presents).
+Chaque type de materiel est une **classe JavaScript dans son propre fichier**
+(dossier `src/services/parc/`). Voici les 2 etapes a suivre.
 
-Une fois l'entree ajoutee :
-- `DashboardPage.vue` affichera automatiquement son compteur
-- `ElementsPage.vue` proposera automatiquement ce type dans son filtre
-- `ResetPage.vue` le supprimera automatiquement lors d'une reinitialisation
-- `services/importData.js` saura l'importer si un CSV contient ce type
-  dans sa colonne `Item_Type` (relire `importerMateriels` pour le detail)
+**Etape 1** : creer `src/services/parc/scanner.js` en copiant le fichier
+d'un type proche (ex: `computer.js` pour un type complet, `cable.js` pour
+un type sans location ni fabricant). Modifier :
 
-> Apres modification, **redemarrez `npm run dev`** : les fichiers `.json`
-> importes sont parfois mis en cache par l'outil de build.
+```js
+export default class Scanner {
+  static itemtype = 'Scanner'          // code GLPI exact (verifier dans l'API)
+  static endpoint = '/Scanner'
+  static label = 'Scanner'
+  static labelPluriel = 'Scanners'
+
+  constructor(row) {
+    this.name = row.Name
+    // ... autres colonnes CSV utilisees par ce type
+  }
+
+  async toInput() {
+    return {
+      name: this.name,
+      // ... champs GLPI exacts de ce type (verifier dans apiv1.json)
+    }
+  }
+
+  async create() {
+    const cree = await post(Scanner.endpoint, await this.toInput())
+    return cree.id
+  }
+
+  static getAll(options = {}) { ... }
+  static getOne(id) { ... }
+  static remove(id) { ... }
+
+  static toDisplay(brut) {
+    return {
+      id: brut.id,
+      type: Scanner.itemtype,
+      name: nettoyer(brut.name),
+      status: ..., location: ..., manufacturer: ...,
+      model: ..., inventory: ..., contact: ...
+      // TOUJOURS les memes cles : ElementsPage.vue s'attend a ce format
+    }
+  }
+}
+```
+
+**Etape 2** : dans [`src/services/parc/index.js`](../src/services/parc/index.js),
+ajouter l'import et l'entree dans le tableau `ELEMENTS` :
+
+```js
+import Scanner from './scanner.js'
+
+export const ELEMENTS = [
+  Computer, Monitor, ..., Scanner  // <-- ajouter ici
+]
+```
+
+Une fois ces 2 etapes faites, automatiquement :
+- `DashboardPage.vue` affiche son compteur
+- `ElementsPage.vue` propose ce type dans le filtre
+- `ResetPage.vue` le supprime lors d'une reinitialisation
+- `ImportPage.vue` sait l'importer si le CSV a `Item_Type = Scanner`
+
+> Apres modification, **redemarrez `npm run dev`** si le changement ne
+> se reflете pas immediatement.
 
 ---
 
@@ -150,11 +201,10 @@ Exemple : ajouter une page "Statistiques" au BackOffice.
 Exemple : ajouter une fonction pour recuperer un seul element du parc par
 son identifiant GLPI (au lieu de toute la liste).
 
-Ouvrez le service concerne (ex: `services/elements.js` ou
-`services/parcElement.js`) et **suivez le modele des fonctions deja
-presentes** : elles delèguent toutes a `get`/`post`/`put`/`del` de
-`services/api.js` et ne contiennent jamais de `fetch` direct. Exemple tire
-de `services/ticket.js` :
+Ouvrez le service concerne (ex: `services/elements.js` ou la classe dans
+`services/parc/`) et **suivez le modele des fonctions deja presentes** :
+elles deleguent toutes a `get`/`post`/`put`/`del` de `services/api.js` et
+ne contiennent jamais de `fetch` direct. Exemple tire de `services/ticket.js` :
 
 ```js
 export function getOne(id) {
@@ -169,7 +219,31 @@ une nouvelle — la coherence du code facilite enormement sa relecture future.
 
 ---
 
-## 5.6 Ou trouver le detail des champs/endpoints de l'API GLPI ?
+## 5.6 Images et documents (upload / affichage)
+
+Les images des materiels sont stockees dans GLPI comme des **Documents**
+(`services/document.js`) et telechargees au moment de l'affichage.
+
+**Pendant l'import** : si l'archive `.zip` contient un fichier dont le nom
+correspond exactement au nom du materiel dans le CSV, `uploadAndLink()` l'envoie
+a GLPI via un `POST` multipart (`/Document`) puis cree le lien (`/Document_Item`).
+
+**Lors de l'affichage** (`ElementsPage.vue`) : `getAllElements()` charge d'abord
+tous les materiels, puis en parallele recupere l'URL blob de la premiere image
+rattachee a chacun. Si aucune image n'est trouvee, l'image de repli locale
+(dossier `public/images/`, meme nom que le materiel) est utilisee.
+
+**Lors du reset** : les documents ne sont PAS supprimes automatiquement avec le
+materiel dans GLPI. `resetAll()` les supprime donc explicitement via
+`document.getAll()` + `document.remove(id)`.
+
+> ⚠️ Un document GLPI lie a un materiel ne peut pas etre lu sans droits API
+> suffisants sur `/Document`. Si les images ne s'affichent pas, verifier les
+> droits du compte API (`VITE_GLPI_USERNAME`) dans GLPI (Profil > Droits).
+
+---
+
+## 5.7 Ou trouver le detail des champs/endpoints de l'API GLPI ?
 
 Les fichiers `apiv1.json` et `apiv2.3.json` a la racine du projet contiennent
 la documentation technique de l'API GLPI utilisee (generee par
