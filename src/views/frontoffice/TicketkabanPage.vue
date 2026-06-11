@@ -161,7 +161,7 @@ import { useRouter } from 'vue-router'
 import * as ticket from '../../services/ticket.js'
 import * as ticketCost from '../../services/ticketCost.js'
 import * as itemTicket from '../../services/itemTicket.js'
-import * as itilFollowUp from '../../services/itilFollowUp.js'
+import * as itilSolution from '../../services/itilSolution.js'
 import { getConfig } from '../../services/kanbanConfig.js'
 
 const router = useRouter()
@@ -283,11 +283,10 @@ async function validerTermine() {
   if (!t) return
 
   try {
-    await itilFollowUp.create({
+    await itilSolution.create({
       itemtype: 'Ticket',
       items_id: t.id,
-      content: solution.value,
-      is_private: 0
+      content: solution.value
     })
     await changerStatut(t.id, 5)
   } catch (e) {
