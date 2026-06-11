@@ -47,7 +47,7 @@ const PRIORITE = {
   Critical: 5,
   Critique: 5
 }
-const STATUT_TICKET = { New: 1, Nouveau: 1, Processing: 2, Assigned: 2, 'In Progress': 2, Planned: 3, Pending: 4, 'En attente': 4, Resolved: 5 ,'Résolu': 5, Solved: 5, Closed: 6 , 'Fermé':6}
+const STATUT_TICKET = { New: 1, Nouveau: 1, Processing: 2, Assigned: 2, 'In Progress': 2, 'In progress': 2, Planned: 3, Pending: 4, 'En attente': 4, Resolved: 5 ,'Résolu': 5, Solved: 5, Closed: 6 , 'Fermé':6}
 
 
 // ----------------------------------------------------------------------------

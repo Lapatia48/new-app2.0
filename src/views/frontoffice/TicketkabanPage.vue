@@ -172,10 +172,14 @@ const router = useRouter()
 // cleCouleur : nom du champ de couleur dans la config (cote SQLite).
 // cleNomMg   : nom du champ "nom malgache" dans la config (cote SQLite).
 const COLONNES = [
-  { statutId: 1, nomEn: 'New', cleCouleur: 'couleurNouveau', cleNomMg: 'nomMgNouveau' },
+  { statutId: 1, nomEn: 'Nouveau', cleCouleur: 'couleurNouveau', cleNomMg: 'nomMgNouveau' },
   { statutId: 2, nomEn: 'In progress', cleCouleur: 'couleurEncours', cleNomMg: 'nomMgEncours' },
-  { statutId: 5, nomEn: 'Done', cleCouleur: 'couleurTermine', cleNomMg: 'nomMgTermine' }
+  { statutId: 6, nomEn: 'Terminé', cleCouleur: 'couleurTermine', cleNomMg: 'nomMgTermine' }
 ]
+
+// Statut "Termine" affiche dans la 3e colonne. Centralise ici pour que le
+// dialogue de cloture (solution) et la validation utilisent la meme valeur.
+const STATUT_TERMINE = 6
 
 // --- Etat de la page (les "boites" reactives) ---
 const tickets = ref([])            // tous les tickets charges depuis GLPI
@@ -264,9 +268,9 @@ function deposer(nouveauStatut) {
     return
   }
 
-  // Cas special : passer en "Termine" (5) demande une info en plus (solution).
+  // Cas special : passer en "Termine" (Clos) demande une info en plus (solution).
   // On ouvre la boite de dialogue ; le changement se fera apres validation.
-  if (nouveauStatut === 5) {
+  if (nouveauStatut === STATUT_TERMINE) {
     solution.value = ''
     dialogueTermine.value = true
     return
@@ -288,7 +292,7 @@ async function validerTermine() {
       items_id: t.id,
       content: solution.value
     })
-    await changerStatut(t.id, 5)
+    await changerStatut(t.id, STATUT_TERMINE)
   } catch (e) {
     erreur.value = 'Impossible de terminer le ticket : ' + e.message
   } finally {

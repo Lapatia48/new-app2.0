@@ -12,7 +12,7 @@
         <label>Langue affichee en haut des colonnes</label>
         <select v-model="config.langue">
           <option value="mg">Malgache (vaovao, efa manao, vita)</option>
-          <option value="en">Anglais (New, In progress, Done)</option>
+          <option value="en">Anglais (Nouveau, In progress, Terminé)</option>
         </select>
       </div>
     </div>
