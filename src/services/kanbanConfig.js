@@ -40,3 +40,22 @@ export async function getConfig() {
     return CONFIG_PAR_DEFAUT
   }
 }
+
+// Enregistre la configuration (POST). Renvoie true si le backend a repondu
+// avec succes, false sinon (la page appelante affiche alors un message d'erreur).
+export async function saveConfig(config) {
+  try {
+    const reponse = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    })
+    return reponse.ok
+  } catch (e) {
+    return false
+  }
+}
+
+// Valeurs d'origine, utilisees par le bouton "Reinitialiser" de la page de
+// configuration du BackOffice.
+export { CONFIG_PAR_DEFAUT }

@@ -13,6 +13,7 @@
                 <RouterLink :to="{ name: 'bo-tickets' }" class="carte">Tickets</RouterLink>
                 <RouterLink :to="{ name: 'bo-import' }" class="carte">Importer les données</RouterLink>
                 <RouterLink :to="{ name: 'bo-reset' }" class="carte">Réinitialiser</RouterLink>
+                <RouterLink :to="{ name: 'bo-kanban-config' }" class="carte">Config Kanban</RouterLink>
             </div>
         </section>
     </div>

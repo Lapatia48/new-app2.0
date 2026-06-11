@@ -11,6 +11,7 @@ import frontoffficeAcceuil from '../views/frontoffice/frontoffficeAcceuil.vue'
 import ElementsPage from '../views/frontoffice/ElementsPage.vue'
 import NewTicketPage from '../views/frontoffice/NewTicketPage.vue'
 import TicketkabanPage from '../views/frontoffice/TicketkabanPage.vue'
+import KanbanConfig from '../views/backoffice/KanbanConfig.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -27,7 +28,8 @@ const router = createRouter({
         { path: 'dashboard', name: 'bo-dashboard', component: DashboardPage },
         { path: 'tickets', name: 'bo-tickets', component: TicketsPage },
         { path: 'import', name: 'bo-import', component: ImportPage },
-        { path: 'reset', name: 'bo-reset', component: ResetPage }
+        { path: 'reset', name: 'bo-reset', component: ResetPage },
+        { path: 'kanban-config', name: 'bo-kanban-config', component: KanbanConfig }
       ]
     },
 
