@@ -54,8 +54,14 @@ function format(n) {
   return (Math.round(n * 100) / 100).toLocaleString('fr-FR')
 }
 
+// GLPI : cost_time est un cout HORAIRE. Il faut donc convertir la duree
+// (actiontime, en secondes) en heures avant de multiplier, puis ajouter
+// les couts fixe et materiel. Total = cost_time * (actiontime/3600) + cost_fixed + cost_material.
 function coutGlpi(couts) {
-  return (couts || []).reduce((s, c) => s + Number(c.cost_time || 0) + Number(c.cost_fixed || 0), 0)
+  return (couts || []).reduce((s, c) => {
+    const heures = Number(c.actiontime || 0) / 3600
+    return s + Number(c.cost_time || 0) * heures + Number(c.cost_fixed || 0) + Number(c.cost_material || 0)
+  }, 0)
 }
 
 const totaux = computed(() => lignes.value.reduce(
