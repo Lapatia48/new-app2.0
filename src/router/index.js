@@ -12,6 +12,7 @@ import ElementsPage from '../views/frontoffice/ElementsPage.vue'
 import NewTicketPage from '../views/frontoffice/NewTicketPage.vue'
 import TicketkabanPage from '../views/frontoffice/TicketkabanPage.vue'
 import KanbanConfig from '../views/backoffice/KanbanConfig.vue'
+import CostPerItemPage from '../views/backoffice/CostPerItemPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -29,7 +30,8 @@ const router = createRouter({
         { path: 'tickets', name: 'bo-tickets', component: TicketsPage },
         { path: 'import', name: 'bo-import', component: ImportPage },
         { path: 'reset', name: 'bo-reset', component: ResetPage },
-        { path: 'kanban-config', name: 'bo-kanban-config', component: KanbanConfig }
+        { path: 'kanban-config', name: 'bo-kanban-config', component: KanbanConfig },
+        { path: 'cout-item', name: 'bo-cout-item', component: CostPerItemPage }
       ]
     },
 

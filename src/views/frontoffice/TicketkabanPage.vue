@@ -70,6 +70,17 @@
           rows="4"
           placeholder="Decrivez la solution (obligatoire)"
         ></textarea>
+
+        <label class="supercost-label">Cout supplementaire (supercost)</label>
+        <input
+          v-model="supercost"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="ex: 100"
+          class="supercost-input"
+        />
+
         <div class="dialogue-actions">
           <button class="btn-secondaire" @click="annulerTermine">Annuler</button>
           <button class="btn" :disabled="!solution.trim()" @click="validerTermine">
@@ -162,6 +173,7 @@ import * as ticket from '../../services/ticket.js'
 import * as ticketCost from '../../services/ticketCost.js'
 import * as itemTicket from '../../services/itemTicket.js'
 import * as itilSolution from '../../services/itilSolution.js'
+import * as supercostService from '../../services/supercost.js'
 import { getConfig } from '../../services/kanbanConfig.js'
 
 const router = useRouter()
@@ -192,6 +204,7 @@ const ticketGlisse = ref(null)
 // Boite de dialogue "Terminer" : visible ou non, + le texte de la solution.
 const dialogueTermine = ref(false)
 const solution = ref('')
+const supercost = ref('')
 
 // Fiche details : le ticket clique + ses sous-donnees (couts, materiels).
 const ticketSelectionne = ref(null)
@@ -272,6 +285,7 @@ function deposer(nouveauStatut) {
   // On ouvre la boite de dialogue ; le changement se fera apres validation.
   if (nouveauStatut === STATUT_TERMINE) {
     solution.value = ''
+    supercost.value = ''
     dialogueTermine.value = true
     return
   }
@@ -292,12 +306,16 @@ async function validerTermine() {
       items_id: t.id,
       content: solution.value
     })
+    if (supercost.value !== '') {
+      await supercostService.save(t.id, Number(supercost.value))
+    }
     await changerStatut(t.id, STATUT_TERMINE)
   } catch (e) {
     erreur.value = 'Impossible de terminer le ticket : ' + e.message
   } finally {
     dialogueTermine.value = false
     solution.value = ''
+    supercost.value = ''
   }
 }
 
@@ -305,6 +323,7 @@ async function validerTermine() {
 function annulerTermine() {
   dialogueTermine.value = false
   solution.value = ''
+  supercost.value = ''
   ticketGlisse.value = null
 }
 
@@ -457,12 +476,20 @@ onMounted(async () => {
   max-width: 420px;
 }
 
-.dialogue textarea {
+.dialogue textarea,
+.supercost-input {
   width: 100%;
   padding: 0.6rem;
   border: 1px solid #ccc;
   border-radius: 6px;
   box-sizing: border-box;
+}
+
+.supercost-label {
+  display: block;
+  font-weight: 600;
+  margin-top: 0.8rem;
+  margin-bottom: 0.3rem;
 }
 
 .dialogue-actions {

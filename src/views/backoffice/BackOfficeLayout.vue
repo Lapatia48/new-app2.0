@@ -8,6 +8,7 @@
       <RouterLink :to="{ name: 'bo-import' }">Import</RouterLink>
       <RouterLink :to="{ name: 'bo-reset' }">Reset</RouterLink>
       <RouterLink :to="{ name: 'bo-kanban-config' }">Config Kanban</RouterLink>
+      <RouterLink :to="{ name: 'bo-cout-item' }">Cout par item</RouterLink>
     </nav>
 
     <!-- La page courante s'affiche ici -->
