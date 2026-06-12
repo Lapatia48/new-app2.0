@@ -476,8 +476,7 @@ onMounted(async () => {
   max-width: 420px;
 }
 
-.dialogue textarea,
-.supercost-input {
+.dialogue textarea {
   width: 100%;
   padding: 0.6rem;
   border: 1px solid #ccc;
@@ -485,12 +484,7 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-.supercost-label {
-  display: block;
-  font-weight: 600;
-  margin-top: 0.8rem;
-  margin-bottom: 0.3rem;
-}
+
 
 .dialogue-actions {
   display: flex;

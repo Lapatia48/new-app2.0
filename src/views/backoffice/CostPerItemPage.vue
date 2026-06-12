@@ -5,7 +5,7 @@
     <p v-if="erreur" class="erreur">{{ erreur }}</p>
     <p v-if="chargement">Calcul des couts en cours...</p>
 
-    <table v-else-if="lignes.length" class="couts">
+    <table v-else-if="lignes.length" class="couts" border="1">
       <thead>
         <tr>
           <th>Item</th>
@@ -117,42 +117,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.page {
-  padding: 2rem;
-}
 
-.couts {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-}
-
-.couts th,
-.couts td {
-  border: 1px solid #e5e7eb;
-  padding: 0.5rem 0.7rem;
-  text-align: left;
-}
-
-.couts thead th {
-  background: #f3f4f6;
-}
-
-.couts .total {
-  font-weight: 700;
-}
-
-.couts tfoot td {
-  background: #f9fafb;
-  font-weight: 600;
-}
-
-.muted {
-  color: #9ca3af;
-}
-
-.erreur {
-  color: #b42318;
-}
-</style>
