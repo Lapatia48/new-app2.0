@@ -12,6 +12,7 @@
           <th>Type</th>
           <th>Cout GLPI</th>
           <th>Supercost</th>
+          <th>Frais de reouverture</th>
           <th>Total</th>
         </tr>
       </thead>
@@ -21,6 +22,7 @@
           <td>{{ l.type }}</td>
           <td>{{ format(l.glpi) }}</td>
           <td>{{ format(l.super) }}</td>
+          <td>{{ format(l.fraisReouverture) }}</td>
           <td class="total">{{ format(l.total) }}</td>
         </tr>
       </tbody>
@@ -29,6 +31,7 @@
           <td colspan="2">Total general</td>
           <td>{{ format(totaux.glpi) }}</td>
           <td>{{ format(totaux.super) }}</td>
+          <td>{{ format(totaux.fraisReouverture) }}</td>
           <td class="total">{{ format(totaux.total) }}</td>
         </tr>
       </tfoot>
@@ -65,8 +68,13 @@ function coutGlpi(couts) {
 }
 
 const totaux = computed(() => lignes.value.reduce(
-  (acc, l) => ({ glpi: acc.glpi + l.glpi, super: acc.super + l.super, total: acc.total + l.total }),
-  { glpi: 0, super: 0, total: 0 }
+  (acc, l) => ({
+    glpi: acc.glpi + l.glpi,
+    super: acc.super + l.super,
+    fraisReouverture: acc.fraisReouverture + l.fraisReouverture,
+    total: acc.total + l.total
+  }),
+  { glpi: 0, super: 0, fraisReouverture: 0, total: 0 }
 ))
 
 onMounted(async () => {
@@ -74,7 +82,11 @@ onMounted(async () => {
     const [tickets, supercosts] = await Promise.all([ticket.getAll(), supercostService.getAll()])
 
     const mapSuper = {}
-    for (const s of supercosts) mapSuper[s.ticketsId] = Number(s.supercost || 0)
+    const mapFrais = {}
+    for (const s of supercosts) {
+      mapSuper[s.ticketsId] = Number(s.supercost || 0)
+      mapFrais[s.ticketsId] = Number(s.fraisReouverture || 0)
+    }
 
     const agg = {}
     for (const t of tickets) {
@@ -87,12 +99,14 @@ onMounted(async () => {
 
       const partGlpi = coutGlpi(couts) / items.length
       const partSuper = (mapSuper[t.id] || 0) / items.length
+      const partFrais = (mapFrais[t.id] || 0) / items.length
 
       for (const it of items) {
         const cle = it.itemtype + '-' + it.items_id
-        if (!agg[cle]) agg[cle] = { type: it.itemtype, items_id: it.items_id, glpi: 0, super: 0 }
+        if (!agg[cle]) agg[cle] = { type: it.itemtype, items_id: it.items_id, glpi: 0, super: 0, fraisReouverture: 0 }
         agg[cle].glpi += partGlpi
         agg[cle].super += partSuper
+        agg[cle].fraisReouverture += partFrais
       }
     }
 
@@ -112,7 +126,8 @@ onMounted(async () => {
         nom: (noms[a.type] && noms[a.type][a.items_id]) || ('#' + a.items_id),
         glpi: a.glpi,
         super: a.super,
-        total: a.glpi + a.super
+        fraisReouverture: a.fraisReouverture,
+        total: a.glpi + a.super + a.fraisReouverture
       }))
       .sort((x, y) => y.total - x.total)
   } catch (e) {

@@ -20,3 +20,21 @@ export async function save(ticketsId, supercost) {
   if (!reponse.ok) throw new Error('Enregistrement du supercost impossible (HTTP ' + reponse.status + ')')
   return await reponse.json()
 }
+
+// Reouverture d'un ticket termine : facture un frais valant "pourcentage" %
+// de l'ancien supercost. Le calcul est fait cote backend.
+export async function reouvrir(ticketsId, pourcentage) {
+  const reponse = await fetch(ENDPOINT + '/' + ticketsId + '/reouverture', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pourcentage: Number(pourcentage) })
+  })
+  if (!reponse.ok) throw new Error('Reouverture impossible (HTTP ' + reponse.status + ')')
+  return await reponse.json()
+}
+
+// Annulation de la cloture : supprime le supercost du ticket s'il existe.
+export async function remove(ticketsId) {
+  const reponse = await fetch(ENDPOINT + '/' + ticketsId, { method: 'DELETE' })
+  if (!reponse.ok) throw new Error('Suppression du supercost impossible (HTTP ' + reponse.status + ')')
+}

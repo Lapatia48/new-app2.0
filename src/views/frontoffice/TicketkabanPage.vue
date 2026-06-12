@@ -90,6 +90,19 @@
       </div>
     </div>
 
+    <!-- Boite de dialogue quand on glisse un ticket termine vers "In progress" -->
+    <div v-if="dialogueReouverture" class="overlay" @click.self="fermerReouverture">
+      <div class="dialogue">
+        <h2>Ticket termine</h2>
+        <label>Pourcentage de reouverture (%)</label>
+        <input v-model="pourcentage" type="number" min="0" placeholder="ex: 10" />
+        <div class="dialogue-actions">
+          <button class="btn-secondaire" @click="annulationTicket">Annulation</button>
+          <button class="btn" @click="reouvertureTicket">Reouverture</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ================= FICHE DETAILS D'UN TICKET ================= -->
     <!-- S'affiche au clic sur une carte : montre TOUS les details du ticket. -->
     <div v-if="ticketSelectionne" class="overlay" @click.self="fermerDetails">
@@ -192,6 +205,9 @@ const COLONNES = [
 // Statut "Termine" affiche dans la 3e colonne. Centralise ici pour que le
 // dialogue de cloture (solution) et la validation utilisent la meme valeur.
 const STATUT_TERMINE = 6
+// Statut "In progress" (2e colonne). Glisser un ticket de Termine vers ce
+// statut declenche le dialogue de reouverture / annulation.
+const STATUT_ENCOURS = 2
 
 // --- Etat de la page (les "boites" reactives) ---
 const tickets = ref([])            // tous les tickets charges depuis GLPI
@@ -205,6 +221,10 @@ const ticketGlisse = ref(null)
 const dialogueTermine = ref(false)
 const solution = ref('')
 const supercost = ref('')
+
+// Boite de dialogue quand on glisse un ticket termine vers "In progress".
+const dialogueReouverture = ref(false)
+const pourcentage = ref('')
 
 // Fiche details : le ticket clique + ses sous-donnees (couts, materiels).
 const ticketSelectionne = ref(null)
@@ -290,8 +310,37 @@ function deposer(nouveauStatut) {
     return
   }
 
+  // Glisser un ticket termine vers "In progress" : on ouvre le dialogue.
+  if (Number(t.status) === STATUT_TERMINE && nouveauStatut === STATUT_ENCOURS) {
+    pourcentage.value = ''
+    dialogueReouverture.value = true
+    return
+  }
+
   // Tous les autres deplacements sont immediats.
   changerStatut(t.id, nouveauStatut)
+}
+
+// Annulation : on supprime le supercost et le ticket repasse "In progress".
+async function annulationTicket() {
+  const t = ticketGlisse.value
+  await supercostService.remove(t.id)
+  await changerStatut(t.id, STATUT_ENCOURS)
+  dialogueReouverture.value = false
+}
+
+// Reouverture : on facture le pourcentage et le ticket reste "Termine".
+async function reouvertureTicket() {
+  const t = ticketGlisse.value
+  await supercostService.reouvrir(t.id, pourcentage.value)
+  dialogueReouverture.value = false
+  ticketGlisse.value = null
+}
+
+// Fermer le dialogue sans rien faire.
+function fermerReouverture() {
+  dialogueReouverture.value = false
+  ticketGlisse.value = null
 }
 
 // 3a) Validation de la boite "Terminer" : on enregistre la solution comme

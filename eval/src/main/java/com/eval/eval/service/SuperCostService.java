@@ -28,4 +28,20 @@ public class SuperCostService {
         repository.enregistrer(superCost);
         return repository.getByTicket(superCost.getTicketsId());
     }
+
+    // Reouverture : le frais facture vaut (pourcentage %) de l'ancien supercost.
+    // Si aucun supercost n'existe, le frais vaut 0.
+    public SuperCost reouvrir(int ticketsId, double pourcentage) {
+        SuperCost existant = repository.getByTicket(ticketsId);
+        double ancienSupercost = (existant != null && existant.getSupercost() != null)
+                ? existant.getSupercost() : 0.0;
+        double frais = ancienSupercost * pourcentage / 100.0;
+        repository.enregistrerFraisReouverture(ticketsId, frais);
+        return repository.getByTicket(ticketsId);
+    }
+
+    // Annulation de la cloture : on supprime le supercost saisi a la cloture.
+    public void supprimer(int ticketsId) {
+        repository.supprimer(ticketsId);
+    }
 }
