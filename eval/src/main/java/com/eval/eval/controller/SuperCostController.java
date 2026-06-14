@@ -3,7 +3,6 @@ package com.eval.eval.controller;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,20 +39,19 @@ public class SuperCostController {
         return service.enregistrer(superCost);
     }
 
-    // Reouverture d'un ticket termine : on facture un frais valant
-    // "pourcentage" % de l'ancien supercost. Le corps attend { "pourcentage": 10 }.
+    // Reouverture : facture un frais valant "pourcentage" % du supercost.
+    // Corps attendu : { "pourcentage": 10 }.
     @PostMapping("/{ticketsId}/reouverture")
     public SuperCost reouvrir(@PathVariable int ticketsId, @RequestBody ReouvertureRequest requete) {
         return service.reouvrir(ticketsId, requete.getPourcentage());
     }
 
-    // Annulation de la cloture : supprime le supercost du ticket s'il existe.
-    @DeleteMapping("/{ticketsId}")
-    public void supprimer(@PathVariable int ticketsId) {
-        service.supprimer(ticketsId);
+    // Annulation : retire le dernier cout de cloture du ticket.
+    @PostMapping("/{ticketsId}/annulation")
+    public SuperCost annuler(@PathVariable int ticketsId) {
+        return service.annuler(ticketsId);
     }
 
-    // Petit conteneur pour le corps JSON de la reouverture.
     public static class ReouvertureRequest {
         private Double pourcentage;
 

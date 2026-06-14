@@ -17,31 +17,35 @@ public class SuperCostService {
     }
 
     public List<SuperCost> getAll() {
-        return repository.getAll();
+        return repository.findAll();
     }
 
     public SuperCost getByTicket(int ticketsId) {
-        return repository.getByTicket(ticketsId);
+        return repository.findById(ticketsId).orElse(null);
     }
 
-    public SuperCost enregistrer(SuperCost superCost) {
-        repository.enregistrer(superCost);
-        return repository.getByTicket(superCost.getTicketsId());
+    // Cloture : on AJOUTE le cout saisi au supercost cumule du ticket et on
+    // memorise ce dernier cout (pour pouvoir l'annuler lors d'une reouverture).
+    public SuperCost enregistrer(SuperCost entree) {
+        SuperCost sc = repository.findById(entree.getTicketsId()).orElse(new SuperCost(entree.getTicketsId()));
+        sc.setSupercost(sc.getSupercost() + entree.getSupercost());
+        sc.setLastClose(entree.getSupercost());
+        return repository.save(sc);
     }
 
-    // Reouverture : le frais facture vaut (pourcentage %) de l'ancien supercost.
-    // Si aucun supercost n'existe, le frais vaut 0.
+    // Reouverture : on ajoute un frais valant pourcentage % du supercost cumule.
     public SuperCost reouvrir(int ticketsId, double pourcentage) {
-        SuperCost existant = repository.getByTicket(ticketsId);
-        double ancienSupercost = (existant != null && existant.getSupercost() != null)
-                ? existant.getSupercost() : 0.0;
-        double frais = ancienSupercost * pourcentage / 100.0;
-        repository.enregistrerFraisReouverture(ticketsId, frais);
-        return repository.getByTicket(ticketsId);
+        SuperCost sc = repository.findById(ticketsId).orElse(new SuperCost(ticketsId));
+        sc.setFraisReouverture(sc.getFraisReouverture() + sc.getSupercost() * pourcentage / 100.0);
+        return repository.save(sc);
     }
 
-    // Annulation de la cloture : on supprime le supercost saisi a la cloture.
-    public void supprimer(int ticketsId) {
-        repository.supprimer(ticketsId);
+    // Annulation : on retire du supercost le dernier cout de cloture (sans frais).
+    public SuperCost annuler(int ticketsId) {
+        SuperCost sc = repository.findById(ticketsId).orElse(null);
+        if (sc == null) return null;
+        sc.setSupercost(sc.getSupercost() - sc.getLastClose());
+        sc.setLastClose(0.0);
+        return repository.save(sc);
     }
 }

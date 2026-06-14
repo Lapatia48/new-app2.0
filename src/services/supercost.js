@@ -33,8 +33,10 @@ export async function reouvrir(ticketsId, pourcentage) {
   return await reponse.json()
 }
 
-// Annulation de la cloture : supprime le supercost du ticket s'il existe.
-export async function remove(ticketsId) {
-  const reponse = await fetch(ENDPOINT + '/' + ticketsId, { method: 'DELETE' })
-  if (!reponse.ok) throw new Error('Suppression du supercost impossible (HTTP ' + reponse.status + ')')
+// Annulation : retire le dernier cout de cloture du ticket (calcul cote backend).
+export async function annuler(ticketsId) {
+  const reponse = await fetch(ENDPOINT + '/' + ticketsId + '/annulation', { method: 'POST' })
+  if (!reponse.ok) throw new Error('Annulation impossible (HTTP ' + reponse.status + ')')
+  const texte = await reponse.text()
+  return texte ? JSON.parse(texte) : null
 }

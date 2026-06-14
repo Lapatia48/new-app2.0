@@ -321,20 +321,21 @@ function deposer(nouveauStatut) {
   changerStatut(t.id, nouveauStatut)
 }
 
-// Annulation : on supprime le supercost et le ticket repasse "In progress".
+// Annulation : on retire le dernier cout de cloture (cote backend) et le ticket
+// repasse "In progress".
 async function annulationTicket() {
   const t = ticketGlisse.value
-  await supercostService.remove(t.id)
+  await supercostService.annuler(t.id)
   await changerStatut(t.id, STATUT_ENCOURS)
   dialogueReouverture.value = false
 }
 
-// Reouverture : on facture le pourcentage et le ticket reste "Termine".
+// Reouverture : on facture le pourcentage puis le ticket passe "In progress".
 async function reouvertureTicket() {
   const t = ticketGlisse.value
   await supercostService.reouvrir(t.id, pourcentage.value)
+  await changerStatut(t.id, STATUT_ENCOURS)
   dialogueReouverture.value = false
-  ticketGlisse.value = null
 }
 
 // Fermer le dialogue sans rien faire.
