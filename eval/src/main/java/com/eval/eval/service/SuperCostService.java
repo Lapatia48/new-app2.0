@@ -33,10 +33,12 @@ public class SuperCostService {
         return repository.save(sc);
     }
 
-    // Reouverture : on ajoute un frais valant pourcentage % du supercost cumule.
+    // Reouverture : on ajoute un frais valant pourcentage % du DERNIER cout de
+    // cloture (lastClose), et non du supercost cumule. Reouvrir un ticket ne
+    // refacture que le dernier travail de cloture, pas tout l'historique.
     public SuperCost reouvrir(int ticketsId, double pourcentage) {
         SuperCost sc = repository.findById(ticketsId).orElse(new SuperCost(ticketsId));
-        sc.setFraisReouverture(sc.getFraisReouverture() + sc.getSupercost() * pourcentage / 100.0);
+        sc.setFraisReouverture(sc.getFraisReouverture() + sc.getLastClose() * pourcentage / 100.0);
         return repository.save(sc);
     }
 

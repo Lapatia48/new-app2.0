@@ -8,7 +8,6 @@
     <table v-else-if="lignes.length" class="couts" border="1">
       <thead>
         <tr>
-          <th>Item</th>
           <th>Type</th>
           <th>Cout GLPI</th>
           <th>Supercost</th>
@@ -17,18 +16,31 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="l in lignes" :key="l.type + '-' + l.items_id">
-          <td>{{ l.nom }}</td>
-          <td>{{ l.type }}</td>
-          <td>{{ format(l.glpi) }}</td>
-          <td>{{ format(l.super) }}</td>
-          <td>{{ format(l.fraisReouverture) }}</td>
-          <td class="total">{{ format(l.total) }}</td>
-        </tr>
+
+        <template v-for="g in parType" :key="g.type">
+          <tr class="type" @click="typeOuvert = typeOuvert === g.type ? null : g.type">
+            <td>{{ typeOuvert === g.type ? '[-]' : '[+]'}} {{ g.type }}</td>
+            <td>{{ format(g.glpi) }}</td>
+            <td>{{ format(g.super) }}</td>
+            <td>{{ format(g.fraisReouverture) }}</td>
+            <td class="total">{{ format(g.total) }}</td>
+          </tr>
+
+          <tr v-for="l in itemsDe(g.type)" v-show="typeOuvert === g.type" :key="g.type + '-' + l.items_id" >
+            <td>{{ l.nom }}</td>
+            <td>{{ format(l.glpi) }}</td>
+            <td>{{ format(l.super) }}</td>
+            <td>{{ format(l.fraisReouverture) }}</td>
+            <td class="total">{{ format(l.total) }}</td>
+          </tr>
+
+        </template>
+
+
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="2">Total general</td>
+          <td >Total general</td>
           <td>{{ format(totaux.glpi) }}</td>
           <td>{{ format(totaux.super) }}</td>
           <td>{{ format(totaux.fraisReouverture) }}</td>
@@ -52,10 +64,31 @@ import { elementParType } from '../../services/parc/index.js'
 const lignes = ref([])
 const chargement = ref(true)
 const erreur = ref(null)
+const typeOuvert=ref(null)
 
 function format(n) {
   return (Math.round(n * 100) / 100).toLocaleString('fr-FR')
 }
+
+function itemsDe(type){
+  return lignes.value.filter((l) => l.type === type)
+}
+
+const parType = computed(() => {
+  const groupes ={}
+  for(const l of lignes.value){
+    if(!groupes[l.type]) {
+      groupes[l.type] = { type:l.type, glpi: 0, super: 0, fraisReouverture: 0, total:0 }
+    }
+
+    groupes[l.type].glpi += l.glpi
+    groupes[l.type].super += l.super
+    groupes[l.type].fraisReouverture += l.fraisReouverture
+    groupes[l.type].total += l.total
+  }
+  return Object.values(groupes).sort((a,b) => b.total - a.total)
+
+})
 
 // GLPI : cost_time est un cout HORAIRE. Il faut donc convertir la duree
 // (actiontime, en secondes) en heures avant de multiplier, puis ajouter

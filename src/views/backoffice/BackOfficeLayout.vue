@@ -6,6 +6,7 @@
       <RouterLink :to="{ name: 'bo-dashboard' }">Tableau de bord</RouterLink>
       <RouterLink :to="{ name: 'bo-tickets' }">Tickets</RouterLink>
       <RouterLink :to="{ name: 'bo-import' }">Import</RouterLink>
+      <RouterLink :to="{ name: 'bo-import-mvt' }">Import de kanbanisation</RouterLink>
       <RouterLink :to="{ name: 'bo-reset' }">Reset</RouterLink>
       <RouterLink :to="{ name: 'bo-kanban-config' }">Config Kanban</RouterLink>
       <RouterLink :to="{ name: 'bo-cout-item' }">Cout par item</RouterLink>
