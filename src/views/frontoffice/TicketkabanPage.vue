@@ -96,6 +96,14 @@
         <h2>Ticket termine</h2>
         <label>Pourcentage de reouverture (%)</label>
         <input v-model="pourcentage" type="number" min="0" placeholder="ex: 10" />
+
+        <label>Mode de calcul</label>
+        <select v-model="mode">
+          <option value="1">1 - Dernier cout</option>
+          <option value="2">2 - Premier cout</option>
+          <option value="3">3 - Moyenne des couts</option>
+          <option value="4">4 - Somme des couts</option>
+        </select>
         <div class="dialogue-actions">
           <button class="btn-secondaire" @click="annulationTicket">Annulation</button>
           <button class="btn" @click="reouvertureTicket">Reouverture</button>
@@ -225,6 +233,8 @@ const supercost = ref('')
 // Boite de dialogue quand on glisse un ticket termine vers "In progress".
 const dialogueReouverture = ref(false)
 const pourcentage = ref('')
+// Mode de calcul du cout de base a la reouverture (1 a 4). Defaut : 1.
+const mode = ref('1')
 
 // Fiche details : le ticket clique + ses sous-donnees (couts, materiels).
 const ticketSelectionne = ref(null)
@@ -313,6 +323,7 @@ function deposer(nouveauStatut) {
   // Glisser un ticket termine vers "In progress" : on ouvre le dialogue.
   if (Number(t.status) === STATUT_TERMINE && nouveauStatut === STATUT_ENCOURS) {
     pourcentage.value = ''
+    mode.value = '1'
     dialogueReouverture.value = true
     return
   }
@@ -341,7 +352,7 @@ async function annulationTicket() {
 async function reouvertureTicket() {
   const t = ticketGlisse.value
   try {
-    await mouvement.reouvrir(t.id, pourcentage.value)
+    await mouvement.reouvrir(t.id, pourcentage.value, mode.value)
     tickets.value = await ticket.getAll()
   } catch (e) {
     erreur.value = 'Mise a jour du statut impossible : ' + e.message

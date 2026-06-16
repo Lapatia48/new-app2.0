@@ -19,10 +19,11 @@ import * as supercost from './supercost.js'
 export const STATUT_ENCOURS = 2
 export const STATUT_TERMINE = 6
 
-// Reouverture : on facture le pourcentage de l'ancien cout (calcul backend),
-// puis le ticket repasse "In progress".
-export async function reouvrir(id, pourcentage) {
-  await supercost.reouvrir(id, pourcentage)
+// Reouverture : on facture le pourcentage d'un cout de base (calcul backend),
+// puis le ticket repasse "In progress". Le "mode" (1 a 4) choisit ce cout de
+// base : 1 = dernier, 2 = premier, 3 = moyenne, 4 = somme des couts.
+export async function reouvrir(id, pourcentage, mode = 1) {
+  await supercost.reouvrir(id, pourcentage, mode)
   await ticket.update(id, { status: STATUT_ENCOURS })
 }
 

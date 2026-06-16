@@ -22,6 +22,11 @@ public class SuperCost {
     @Column(name = "last_close")
     private Double lastClose = 0.0;
 
+    // Historique de TOUS les couts de cloture, separes par des virgules
+    // (ex : "10,20,30"). Sert aux modes de calcul de la reouverture.
+    @Column(name = "closes")
+    private String closes = "";
+
     public SuperCost() {
     }
 
@@ -59,5 +64,13 @@ public class SuperCost {
 
     public void setLastClose(Double lastClose) {
         this.lastClose = lastClose;
+    }
+
+    public String getCloses() {
+        return closes;
+    }
+
+    public void setCloses(String closes) {
+        this.closes = closes;
     }
 }

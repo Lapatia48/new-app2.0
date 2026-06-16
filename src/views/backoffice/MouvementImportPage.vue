@@ -50,9 +50,10 @@ async function chargerRefVersId(){
 // On se contente de traduire le format CSV (libelle de mouvement, virgule
 // decimale) puis on delegue a la MEME logique metier que le kanban
 // (services/mouvement.js) : aucune duplication des couts/statuts ici.
-async function appliquer(id, mvt, valeur){
+// "mode" (colonne CSV) n'est utilise que pour la reouverture (open).
+async function appliquer(id, mvt, valeur, mode){
     if(mvt === 'open'){
-        await mouvement.reouvrir(id, nombre(valeur))
+        await mouvement.reouvrir(id, nombre(valeur), mode)
     } else if (mvt === 'cancel'){
         await mouvement.annuler(id)
     } else if (mvt === 'close'){
@@ -73,7 +74,7 @@ async function lancerImport(){
             try{
                 const id = refVersId[String(row.ticket).trim()]
                 if(!id) throw new Error('ticket #' + row.ticket + ' introuvable')
-                await appliquer(id, row.mvt, row.valeur)
+                await appliquer(id, row.mvt, row.valeur, row.mode)
                 log('OK ticket #' + row.ticket + ' (' + id + ') ' + row.mvt + ' ' + row.valeur)
             }
             catch(e){

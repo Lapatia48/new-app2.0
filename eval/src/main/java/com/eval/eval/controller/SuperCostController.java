@@ -39,11 +39,11 @@ public class SuperCostController {
         return service.enregistrer(superCost);
     }
 
-    // Reouverture : facture un frais valant "pourcentage" % du supercost.
-    // Corps attendu : { "pourcentage": 10 }.
+    // Reouverture : facture un frais valant "pourcentage" % d'un cout de base.
+    // Corps attendu : { "pourcentage": 10, "mode": 1 }.
     @PostMapping("/{ticketsId}/reouverture")
     public SuperCost reouvrir(@PathVariable int ticketsId, @RequestBody ReouvertureRequest requete) {
-        return service.reouvrir(ticketsId, requete.getPourcentage());
+        return service.reouvrir(ticketsId, requete.getPourcentage(), requete.getMode());
     }
 
     // Annulation : retire le dernier cout de cloture du ticket.
@@ -54,6 +54,7 @@ public class SuperCostController {
 
     public static class ReouvertureRequest {
         private Double pourcentage;
+        private Integer mode;
 
         public Double getPourcentage() {
             return pourcentage == null ? 0.0 : pourcentage;
@@ -61,6 +62,15 @@ public class SuperCostController {
 
         public void setPourcentage(Double pourcentage) {
             this.pourcentage = pourcentage;
+        }
+
+        // Mode de calcul (1 a 4). Defaut 1 (dernier cout) si absent.
+        public int getMode() {
+            return mode == null ? 1 : mode;
+        }
+
+        public void setMode(Integer mode) {
+            this.mode = mode;
         }
     }
 }
