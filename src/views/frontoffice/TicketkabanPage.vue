@@ -186,7 +186,7 @@ import * as ticket from '../../services/ticket.js'
 import * as ticketCost from '../../services/ticketCost.js'
 import * as itemTicket from '../../services/itemTicket.js'
 import * as itilSolution from '../../services/itilSolution.js'
-import * as supercostService from '../../services/supercost.js'
+import * as mouvement from '../../services/mouvement.js'
 import { getConfig } from '../../services/kanbanConfig.js'
 
 const router = useRouter()
@@ -322,20 +322,33 @@ function deposer(nouveauStatut) {
 }
 
 // Annulation : on retire le dernier cout de cloture (cote backend) et le ticket
-// repasse "In progress".
+// repasse "In progress". Meme logique metier que l'import (services/mouvement.js).
 async function annulationTicket() {
   const t = ticketGlisse.value
-  await supercostService.annuler(t.id)
-  await changerStatut(t.id, STATUT_ENCOURS)
-  dialogueReouverture.value = false
+  try {
+    await mouvement.annuler(t.id)
+    tickets.value = await ticket.getAll()
+  } catch (e) {
+    erreur.value = 'Mise a jour du statut impossible : ' + e.message
+  } finally {
+    ticketGlisse.value = null
+    dialogueReouverture.value = false
+  }
 }
 
 // Reouverture : on facture le pourcentage puis le ticket passe "In progress".
+// Meme logique metier que l'import (services/mouvement.js).
 async function reouvertureTicket() {
   const t = ticketGlisse.value
-  await supercostService.reouvrir(t.id, pourcentage.value)
-  await changerStatut(t.id, STATUT_ENCOURS)
-  dialogueReouverture.value = false
+  try {
+    await mouvement.reouvrir(t.id, pourcentage.value)
+    tickets.value = await ticket.getAll()
+  } catch (e) {
+    erreur.value = 'Mise a jour du statut impossible : ' + e.message
+  } finally {
+    ticketGlisse.value = null
+    dialogueReouverture.value = false
+  }
 }
 
 // Fermer le dialogue sans rien faire.
@@ -356,16 +369,16 @@ async function validerTermine() {
       items_id: t.id,
       content: solution.value
     })
-    if (supercost.value !== '') {
-      await supercostService.save(t.id, Number(supercost.value))
-    }
-    await changerStatut(t.id, STATUT_TERMINE)
+    // Meme logique metier que l'import (services/mouvement.js) : cout + statut.
+    await mouvement.cloturer(t.id, supercost.value === '' ? '' : Number(supercost.value))
+    tickets.value = await ticket.getAll()
   } catch (e) {
     erreur.value = 'Impossible de terminer le ticket : ' + e.message
   } finally {
     dialogueTermine.value = false
     solution.value = ''
     supercost.value = ''
+    ticketGlisse.value = null
   }
 }
 

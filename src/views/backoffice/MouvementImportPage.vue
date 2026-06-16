@@ -13,10 +13,7 @@
 import { ref } from 'vue'
 import { parseCsv } from '../../services/csv';
 import * as ticket from '../../services/ticket.js'
-import * as supercost from '../../services/supercost.js'
-
-const STATUT_ENCOURS=2
-const STATUT_TERMINE=6
+import * as mouvement from '../../services/mouvement.js'
 
 const texte=ref(null)
 const enCours=ref(false)
@@ -50,16 +47,16 @@ async function chargerRefVersId(){
     return refVersId
 }
 
+// On se contente de traduire le format CSV (libelle de mouvement, virgule
+// decimale) puis on delegue a la MEME logique metier que le kanban
+// (services/mouvement.js) : aucune duplication des couts/statuts ici.
 async function appliquer(id, mvt, valeur){
     if(mvt === 'open'){
-        await supercost.reouvrir(id, nombre(valeur))
-        await ticket.update(id, {status: STATUT_ENCOURS})
+        await mouvement.reouvrir(id, nombre(valeur))
     } else if (mvt === 'cancel'){
-        await supercost.annuler(id)
-        await ticket.update(id, {status: STATUT_ENCOURS})
+        await mouvement.annuler(id)
     } else if (mvt === 'close'){
-        if(valeur!=='') await supercost.save(id, nombre(valeur))
-        await ticket.update(id, {status: STATUT_TERMINE})
+        await mouvement.cloturer(id, valeur === '' ? '' : nombre(valeur))
     } else {
         throw new Error('mouvement inconnu : ' + mvt)
     }
