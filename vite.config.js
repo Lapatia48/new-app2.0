@@ -11,7 +11,7 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
-  server: {
+  server: { 
     proxy: {
       // Tout ce qui commence par /glpi est renvoye vers le serveur GLPI.
       // Cela evite les erreurs CORS pendant le developpement.

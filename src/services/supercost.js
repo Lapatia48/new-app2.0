@@ -21,13 +21,11 @@ export async function save(ticketsId, supercost) {
   return await reponse.json()
 }
 
-// Reouverture d'un ticket termine : facture un frais valant "pourcentage" %
-// de l'ancien supercost. Le calcul est fait cote backend.
-export async function reouvrir(ticketsId, pourcentage) {
-  const reponse = await fetch(ENDPOINT + '/' + ticketsId + '/reouverture', {
+export async function reouvrir(ticketsId, pourcentage, mode){
+  const reponse = await fetch(ENDPOINT + '/' + ticketsId + '/' + mode + '/reouverture', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pourcentage: Number(pourcentage) })
+    headers: { 'Content-Type': 'application/json'},
+    body: JSON.stringify({pourcentage: Number(pourcentage)})
   })
   if (!reponse.ok) throw new Error('Reouverture impossible (HTTP ' + reponse.status + ')')
   return await reponse.json()

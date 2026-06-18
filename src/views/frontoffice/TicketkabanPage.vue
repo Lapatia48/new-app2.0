@@ -96,9 +96,14 @@
         <h2>Ticket termine</h2>
         <label>Pourcentage de reouverture (%)</label>
         <input v-model="pourcentage" type="number" min="0" placeholder="ex: 10" />
+        
+        <label>Mode</label>
+        <input v-model="mode" type="number" min="0">
+
         <div class="dialogue-actions">
           <button class="btn-secondaire" @click="annulationTicket">Annulation</button>
-          <button class="btn" @click="reouvertureTicket">Reouverture</button>
+          <!-- <button class="btn" @click="reouvertureTicket">Reouverture</button> -->
+           <button class="btn" @click="reouvertureTicket1">Reouverture avec mode</button>
         </div>
       </div>
     </div>
@@ -225,6 +230,7 @@ const supercost = ref('')
 // Boite de dialogue quand on glisse un ticket termine vers "In progress".
 const dialogueReouverture = ref(false)
 const pourcentage = ref('')
+const mode = ref('')
 
 // Fiche details : le ticket clique + ses sous-donnees (couts, materiels).
 const ticketSelectionne = ref(null)
@@ -342,6 +348,19 @@ async function reouvertureTicket() {
   const t = ticketGlisse.value
   try {
     await mouvement.reouvrir(t.id, pourcentage.value)
+    tickets.value = await ticket.getAll()
+  } catch (e) {
+    erreur.value = 'Mise a jour du statut impossible : ' + e.message
+  } finally {
+    ticketGlisse.value = null
+    dialogueReouverture.value = false
+  }
+}
+
+async function reouvertureTicket1(){
+  const t = ticketGlisse.value
+  try{
+    await mouvement.reouvrir1(t.id, pourcentage.value, mode.value) 
     tickets.value = await ticket.getAll()
   } catch (e) {
     erreur.value = 'Mise a jour du statut impossible : ' + e.message

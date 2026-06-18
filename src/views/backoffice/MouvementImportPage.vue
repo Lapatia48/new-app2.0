@@ -62,6 +62,17 @@ async function appliquer(id, mvt, valeur){
     }
 }
 
+async function appliquer1(id, mvt, valeur, mode){
+    if(mvt === 'open'){
+        await mouvement.reouvrir1(id, nombre(valeur),mode)
+    } else if (mvt === 'cancel'){
+        await mouvement.annuler(id)
+    } else if (mvt === 'close'){
+        await mouvement.cloturer(id, valeur === '' ? '' : nombre(valeur))
+    } else {
+        throw new Error('mouvement inconnu : ' + mvt)
+    }
+}
 
 async function lancerImport(){
     enCours.value= true
@@ -73,7 +84,7 @@ async function lancerImport(){
             try{
                 const id = refVersId[String(row.ticket).trim()]
                 if(!id) throw new Error('ticket #' + row.ticket + ' introuvable')
-                await appliquer(id, row.mvt, row.valeur)
+                await appliquer1(id, row.mvt, row.valeur, row.mode)
                 log('OK ticket #' + row.ticket + ' (' + id + ') ' + row.mvt + ' ' + row.valeur)
             }
             catch(e){
@@ -86,5 +97,29 @@ async function lancerImport(){
         enCours.value=false
     }
 }
+
+// async function lancerImport(){
+//     enCours.value= true
+//     journal.value=[]
+//     try{
+//         const{rows} = parseCsv(texte.value)
+//         const refVersId = await chargerRefVersId()
+//         for(const row of rows){
+//             try{
+//                 const id = refVersId[String(row.ticket).trim()]
+//                 if(!id) throw new Error('ticket #' + row.ticket + ' introuvable')
+//                 await appliquer(id, row.mvt, row.valeur)
+//                 log('OK ticket #' + row.ticket + ' (' + id + ') ' + row.mvt + ' ' + row.valeur)
+//             }
+//             catch(e){
+//                 log('erreur import : ' + e.message)
+//             }
+//         }
+//         log('Import termine.')
+//     }
+//     finally{
+//         enCours.value=false
+//     }
+// }
 
 </script>

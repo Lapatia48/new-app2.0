@@ -21,9 +21,14 @@ export const STATUT_TERMINE = 6
 
 // Reouverture : on facture le pourcentage de l'ancien cout (calcul backend),
 // puis le ticket repasse "In progress".
-export async function reouvrir(id, pourcentage) {
-  await supercost.reouvrir(id, pourcentage)
-  await ticket.update(id, { status: STATUT_ENCOURS })
+// export async function reouvrir(id, pourcentage) {
+//   await supercost.reouvrir(id, pourcentage)
+//   await ticket.update(id, { status: STATUT_ENCOURS })
+// }
+
+export async function reouvrir1(id, pourcentage, mode){
+  await supercost.reouvrir(id,pourcentage,mode)
+  await ticket.update(id,{status: STATUT_ENCOURS})
 }
 
 // Annulation : on retire le dernier cout de cloture (calcul backend),
@@ -41,3 +46,5 @@ export async function cloturer(id, cout) {
   if (cout !== '' && cout != null) await supercost.save(id, cout)
   await ticket.update(id, { status: STATUT_TERMINE })
 }
+
+
