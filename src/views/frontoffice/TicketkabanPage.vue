@@ -95,10 +95,15 @@
       <div class="dialogue">
         <h2>Ticket termine</h2>
         <label>Pourcentage de reouverture (%)</label>
-        <input v-model="pourcentage" type="number" min="0" placeholder="ex: 10" />
+        <input v-model="pourcentage" type="number" min="0" placeholder="ex: 10" /><br><br>
         
-        <label>Mode</label>
-        <input v-model="mode" type="number" min="0">
+        <label>Mode de calcul</label>
+        <select v-model.number="mode">
+          <option value="1">1 - Dernier cout</option>
+          <option value="2">2 - Premier cout</option>
+          <option value="3">3 - Moyenne des couts</option>
+          <option value="4">4 - Somme des couts</option>
+        </select>
 
         <div class="dialogue-actions">
           <button class="btn-secondaire" @click="annulationTicket">Annulation</button>
@@ -319,6 +324,7 @@ function deposer(nouveauStatut) {
   // Glisser un ticket termine vers "In progress" : on ouvre le dialogue.
   if (Number(t.status) === STATUT_TERMINE && nouveauStatut === STATUT_ENCOURS) {
     pourcentage.value = ''
+    mode.value = 1
     dialogueReouverture.value = true
     return
   }
