@@ -149,22 +149,47 @@
         <p v-else class="muted">Aucun materiel rattache.</p>
 
         <h3>Couts</h3>
-        <table v-if="couts.length" class="couts">
-          <thead>
-            <tr>
-              <th>Duree (s)</th>
-              <th>Cout temps</th>
-              <th>Cout fixe</th>
+        <table v-if="lignes.length" class="couts" border="1">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Cout GLPI</th>
+            <th>Supercost</th>
+            <th>Frais de reouverture</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="g in parType" :key="g.type">
+            <tr class="type" @click="typeOuvert = typeOuvert === g.type ? null : g.type">
+              <td>{{ typeOuvert === g.type ? '[-]' : '[+]'}} {{ g.type }}</td>
+              <td>{{ format(g.glpi) }}</td>
+              <td>{{ format(g.super) }}</td>
+              <td>{{ format(g.fraisReouverture) }}</td>
+              <td class="total">{{ format(g.total) }}</td>
             </tr>
-          </thead>
-          <tbody>
-            <tr v-for="c in couts" :key="c.id">
-              <td>{{ c.actiontime }}</td>
-              <td>{{ c.cost_time }}</td>
-              <td>{{ c.cost_fixed }}</td>
+
+            <tr v-for="l in itemsDe(g.type)" v-show="typeOuvert === g.type" :key="g.type + '-' + l.items_id" >
+              <td>{{ l.nom }}</td>
+              <td>{{ format(l.glpi) }}</td>
+              <td>{{ format(l.super) }}</td>
+              <td>{{ format(l.fraisReouverture) }}</td>
+              <td class="total">{{ format(l.total) }}</td>
             </tr>
-          </tbody>
-        </table>
+
+          </template>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td >Total general</td>
+            <td>{{ format(totaux.glpi) }}</td>
+            <td>{{ format(totaux.super) }}</td>
+            <td>{{ format(totaux.fraisReouverture) }}</td>
+            <td class="total">{{ format(totaux.total) }}</td>
+          </tr>
+        </tfoot>
+       </table>
+
         <p v-else class="muted">Aucun cout pour ce ticket.</p>
       </div>
     </div>
@@ -190,7 +215,7 @@
 // du backend Spring Boot (stockes en SQLite), via le service kanbanConfig.js.
 // ============================================================================
 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import * as ticket from '../../services/ticket.js'
 import * as ticketCost from '../../services/ticketCost.js'
@@ -198,6 +223,8 @@ import * as itemTicket from '../../services/itemTicket.js'
 import * as itilSolution from '../../services/itilSolution.js'
 import * as mouvement from '../../services/mouvement.js'
 import { getConfig } from '../../services/kanbanConfig.js'
+import * as supercostService from '../../services/supercost.js'
+import {elementParType} from '../../services/parc/index.js'
 
 const router = useRouter()
 
@@ -239,7 +266,8 @@ const mode = ref('')
 
 // Fiche details : le ticket clique + ses sous-donnees (couts, materiels).
 const ticketSelectionne = ref(null)
-const couts = ref([])
+const lignes = ref([])
+const typeOuvert = ref([])
 const materiels = ref([])
 const nomsMateriels = ref({})
 
@@ -432,13 +460,106 @@ async function changerStatut(id, nouveauStatut) {
 // DETAILS : au clic sur une carte, on charge couts + materiels et on affiche
 // la fiche.
 // ----------------------------------------------------------------------------
+function format(n) {
+  return (Math.round(n * 100) / 100).toLocaleString('fr-FR')
+}
+
+function itemsDe(type){
+  return lignes.value.filter((l) => l.type === type)
+}
+
+
+const parType = computed(() => {
+  const groupes ={}
+  for(const l of lignes.value){
+    if(!groupes[l.type]) {
+      groupes[l.type] = { type:l.type, glpi: 0, super: 0, fraisReouverture: 0, total:0 }
+    }
+
+    groupes[l.type].glpi += l.glpi
+    groupes[l.type].super += l.super
+    groupes[l.type].fraisReouverture += l.fraisReouverture
+    groupes[l.type].total += l.total
+  }
+  return Object.values(groupes).sort((a,b) => b.total - a.total)
+
+})
+
+// GLPI : cost_time est un cout HORAIRE. Il faut donc convertir la duree
+// (actiontime, en secondes) en heures avant de multiplier, puis ajouter
+// les couts fixe et materiel. Total = cost_time * (actiontime/3600) + cost_fixed + cost_material.
+function coutGlpi(couts) {
+  return (couts || []).reduce((s, c) => {
+    const heures = Number(c.actiontime || 0) / 3600
+    return s + Number(c.cost_time || 0) * heures + Number(c.cost_fixed || 0) + Number(c.cost_material || 0)
+  }, 0)
+}
+
+const totaux = computed(() => lignes.value.reduce(
+  (acc, l) => ({
+    glpi: acc.glpi + l.glpi,
+    super: acc.super + l.super,
+    fraisReouverture: acc.fraisReouverture + l.fraisReouverture,
+    total: acc.total + l.total
+  }),
+  { glpi: 0, super: 0, fraisReouverture: 0, total: 0 }
+))
+
+
 async function ouvrirDetails(t) {
   ticketSelectionne.value = t
-  couts.value = []
+  lignes.value = []
   materiels.value = []
+  typeOuvert.value = null
   try {
-    couts.value = (await ticketCost.getAllForTicket(t.id)) || []
-    materiels.value = (await itemTicket.getAllForTicket(t.id)) || []
+    const [couts, liens, supercosts ] = await Promise.all([
+      ticketCost.getAllForTicket(t.id).catch(() => []),
+      itemTicket.getAllForTicket(t.id).catch(() => []),
+      supercostService.getAll()
+    ])
+    materiels.value = liens || []
+    const items = liens || []
+
+    const mapSuper = {}
+    const mapFrais = {}
+
+    for (const s of supercosts) {
+      mapSuper[s.ticketsId] = Number(s.supercost || 0)
+      mapFrais[s.ticketsId] = Number(s.fraisReouverture || 0)
+    }
+
+    const partGlpi = coutGlpi(couts) / (items.length || 1)
+    const partSuper = (mapSuper[t.id] || 0) / (items.length || 1)
+    const partFrais = (mapFrais[t.id] || 0) / (items.length || 1)
+
+    const agg = {}
+    for ( const it of items ){
+      const cle = it.itemtype + '-' + it.items_id
+      if (!agg[cle]) agg[cle] = {type: it.itemtype, items_id: it.items_id, glpi:0, super: 0, fraisReouverture:0  }
+      agg[cle].glpi += partGlpi
+      agg[cle].super += partSuper
+      agg[cle].fraisReouverture += partFrais
+    }
+
+    const noms = {}
+    for (const type of new Set(Object.values(agg).map((a) => a.type))){
+      noms[type] ={}
+      try{
+        const liste = await elementParType(type).getAll()
+        for(const o of liste) noms[type][o.id] = o.name
+      } catch (e) {}
+    } 
+
+    lignes.value = Object.values(agg).map((a) => ({
+      type: a.type,
+      items_id: a.items_id,
+      nom: (noms[a.type] && noms[a.type][a.items_id] || ('#' + a.items_id)),
+      glpi: a.glpi,
+      super: a.super,
+      fraisReouverture: a.fraisReouverture,
+      total: a.glpi+ a.super + a.fraisReouverture
+    }))
+
   } catch (e) {
     erreur.value = e.message
   }
