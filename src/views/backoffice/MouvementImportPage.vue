@@ -50,17 +50,17 @@ async function chargerRefVersId(){
 // On se contente de traduire le format CSV (libelle de mouvement, virgule
 // decimale) puis on delegue a la MEME logique metier que le kanban
 // (services/mouvement.js) : aucune duplication des couts/statuts ici.
-async function appliquer(id, mvt, valeur){
-    if(mvt === 'open'){
-        await mouvement.reouvrir(id, nombre(valeur))
-    } else if (mvt === 'cancel'){
-        await mouvement.annuler(id)
-    } else if (mvt === 'close'){
-        await mouvement.cloturer(id, valeur === '' ? '' : nombre(valeur))
-    } else {
-        throw new Error('mouvement inconnu : ' + mvt)
-    }
-}
+// async function appliquer(id, mvt, valeur){
+//     if(mvt === 'open'){
+//         await mouvement.reouvrir(id, nombre(valeur))
+//     } else if (mvt === 'cancel'){
+//         await mouvement.annuler(id)
+//     } else if (mvt === 'close'){
+//         await mouvement.cloturer(id, valeur === '' ? '' : nombre(valeur))
+//     } else {
+//         throw new Error('mouvement inconnu : ' + mvt)
+//     }
+// }
 
 async function appliquer1(id, mvt, valeur, mode){
     if(mvt === 'open'){

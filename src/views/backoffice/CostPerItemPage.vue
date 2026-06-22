@@ -35,8 +35,6 @@
           </tr>
 
         </template>
-
-
       </tbody>
       <tfoot>
         <tr>

@@ -14,6 +14,7 @@ import TicketkabanPage from '../views/frontoffice/TicketkabanPage.vue'
 import KanbanConfig from '../views/backoffice/KanbanConfig.vue'
 import CostPerItemPage from '../views/backoffice/CostPerItemPage.vue'
 import MouvementImportPage from '../views/backoffice/MouvementImportPage.vue'
+import ListReouverture from '../views/backoffice/ReouvertureList.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -33,7 +34,8 @@ const router = createRouter({
         { path: 'import-mouvements', name: 'bo-import-mvt', component: MouvementImportPage },
         { path: 'reset', name: 'bo-reset', component: ResetPage },
         { path: 'kanban-config', name: 'bo-kanban-config', component: KanbanConfig },
-        { path: 'cout-item', name: 'bo-cout-item', component: CostPerItemPage }
+        { path: 'cout-item', name: 'bo-cout-item', component: CostPerItemPage },
+        { path:'reouverture-list', name: 'bo-reouverture-list', component: ListReouverture}
       ]
     },
 
