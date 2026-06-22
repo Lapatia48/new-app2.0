@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -75,5 +76,25 @@ public class SuperCostController {
         public void setPourcentage(Double pourcentage) {
             this.pourcentage = pourcentage;
         }
+    }
+
+    @PutMapping("/historique/{id}")
+    public SuperCost modifierHistorique(@PathVariable Long id, @RequestBody ModifierHistoriqueRequest request ){
+        return service.modifierHistorique(id, request.getMontant(), request. getMode(), request.getPourcentage());
+    }
+
+    public static class ModifierHistoriqueRequest{
+        private Double montant;
+        private Integer mode;
+        private Double pourcentage;
+
+        public Double getMontant() { return montant;}
+        public void setMontant(Double montant){this.montant = montant;}
+
+        public Integer getMode(){return mode;}
+        public void setMode(Integer mode){ this.mode = mode;}
+
+        public Double getPourcentage(){return pourcentage;}
+        public void setPourcentage(Double pourcentage){this.pourcentage=pourcentage;}
     }
 }

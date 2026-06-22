@@ -1,0 +1,8 @@
+On va creer une nouvelle page dans backoffice, crudCout: page qui liste toutes les reouvertures et supercost d'un ticket par ordre chronologique
+Sur la liste on va ajouter un bouton modifier pour modifier les valeurs des reouvertures(valeur et mode), ou du supercost
+La validation de la modification implique qu'on refait les calculs et les valeurs affichee dans CostPerItem change
+
+Scenario exemple: ticket1: terminee supercost 50, reouverture 0%, termine 100, reouverture 10% mode 3(moyenne) on a donc fraisReouveture =7,5
+Dans ce cas sur coutPerItem on a frais 7,5
+Si on va dans le crud, on modifie le mode par 4 (somme des couts), le resultat devient 10% de 150 donc 15
+Mais si on fait un modifier de supercost, on doit recalculer tout les reouvertures filles concernees

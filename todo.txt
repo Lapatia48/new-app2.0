@@ -1,0 +1,7 @@
+Vue:
+-creer la page de liste des couts et supercost(reprendre les fonctions de costperitem)
+-creer le composant de crud sur click modifier
+-creer le script setup qui traite ces donnees
+
+Metier:
+-rappel des fonctions de calcul dans de l'insert des modifs

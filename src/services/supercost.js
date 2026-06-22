@@ -38,3 +38,20 @@ export async function annuler(ticketsId) {
   const texte = await reponse.text()
   return texte ? JSON.parse(texte) : null
 }
+
+export async function getHistorique(ticketsId){
+  const reponse = await fetch(ENDPOINT + '/' + ticketsId + '/historique')
+  if(!reponse.ok) return []
+  return await reponse.json()
+}
+
+export async function modifierHistorique(id,valeurs){
+  const reponse = await fetch(ENDPOINT + '/historique/' + id, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(valeurs)
+  })
+  if(!reponse.ok) throw new Error('Modification impossible')
+    return await reponse.json()
+}
+ 

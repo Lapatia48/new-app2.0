@@ -137,4 +137,59 @@ public class SuperCostService {
     public List<HistoriqueCout> getHistoriqueParTicket(int ticketsId) {
         return historiqueRepository.findByTicketsIdOrderByDateOperationAsc(ticketsId);
     }
+
+    @Transactional
+    public SuperCost modifierHistorique(Long id, Double montant, Integer mode, Double pourcentage){
+        HistoriqueCout h = historiqueRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Non trouve"));
+        
+        if (h.getTypeOperation().equals("CLOTURE")) {
+            h.setMontant(montant);
+        } else if (h.getTypeOperation().equals("REOUVERTURE")){
+            h.setModeUtilise(mode);
+            h.setPourcentageApplique(pourcentage);
+        }
+        historiqueRepository.save(h);
+
+        return recalculer(h.getTicketsId());
+    }
+
+    @Transactional
+    public SuperCost recalculer(int ticketsId){
+        SuperCost sc = repository.findById(ticketsId).orElse(null);
+        if (sc == null) return null;
+
+        List<HistoriqueCout> historique = historiqueRepository.findByTicketsIdOrderByDateOperationAsc(ticketsId);
+        List<Double> clotures = new ArrayList<>();
+        double supercost= 0.0;
+        double lastClose = 0.0;
+        double totalFrais = 0.0;
+
+        for (HistoriqueCout h : historique){
+            if (h.getTypeOperation().equals("CLOTURE")) {
+                clotures.add(h.getMontant());
+                supercost = supercost + h.getMontant();
+                lastClose = h.getMontant();
+            } else if (h.getTypeOperation().equals("REOUVERTURE")){
+                double base = 0.0;
+                if(!clotures.isEmpty()){
+                    int mode = h.getModeUtilise() == null ? 1:h.getModeUtilise();
+                    if (mode == 1) base = clotures.get(clotures.size() - 1);
+                    else if (mode == 2 ) base = clotures.get(0);
+                    else if (mode == 3 ) base = clotures.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+                    else if (mode == 4) base = clotures.stream().mapToDouble(Double::doubleValue).sum();
+                }
+                double pct = h.getPourcentageApplique() == null ? 0.0 : h.getPourcentageApplique();
+                double frais = base * pct / 100.0;
+                h.setMontant(frais);
+                historiqueRepository.save(h);
+                totalFrais=totalFrais+frais;
+            }
+        }
+        sc.setSupercost(supercost);
+        sc.setLastClose(lastClose);
+        sc.setFraisReouverture(totalFrais);
+        return repository.save(sc);
+    }
+
 }
